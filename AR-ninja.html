@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Edu-Ninja: เกมฟันผลไม้คำศัพท์</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Mitr', sans-serif;
+            background-color: #111827; /* Tailwind gray-900 */
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        /* Custom UI Overlay setup */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let canvas handle interactions if needed */
+        }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Loading Animation */
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3b82f6;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <!-- Hidden video element for MediaPipe -->
+    <video id="input_video" class="hidden" autoplay playsinline></video>
+    
+    <!-- Main Game Canvas -->
+    <canvas id="output_canvas"></canvas>
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="flex flex-col items-center justify-center">
+        
+        <!-- START SCREEN -->
+        <div id="start-screen" class="absolute inset-0 bg-gray-900 bg-opacity-90 flex flex-col items-center justify-center z-50 transition-opacity duration-500 pointer-events-auto">
+            <h1 class="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500 mb-4 drop-shadow-lg text-center">
+                AR Edu-Ninja<br><span class="text-4xl text-white">ฟันผลไม้ ทายคำศัพท์</span>
+            </h1>
+            <p class="text-xl text-gray-300 mb-8 text-center max-w-2xl px-4">
+                ใช้มือของคุณแทนดาบนินจา ฟันผลไม้ที่ลอยขึ้นมาเพื่อเรียนรู้คำศัพท์!<br>
+                <span class="text-red-400 font-bold">ระวังอย่าฟันโดนระเบิด (Junk Food) 💣</span>
+            </p>
+            
+            <div id="loading-indicator" class="flex flex-col items-center">
+                <div class="loader mb-4"></div>
+                <p class="text-yellow-400 animate-pulse text-xl">กำลังโหลดระบบ AI และกล้อง... รอสักครู่ครับ</p>
+            </div>
+
+            <button id="start-btn" class="hidden px-10 py-5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white text-3xl rounded-full font-bold shadow-[0_0_20px_rgba(16,185,129,0.5)] transition-transform transform hover:scale-110 active:scale-95">
+                แตะเพื่อเริ่มเกม!
+            </button>
+            <p id="start-hint" class="hidden mt-4 text-gray-400">(คลิกปุ่มเพื่อเปิดระบบเสียงและเริ่มเกม)</p>
+        </div>
+
+        <!-- HUD: Heads Up Display (Play Screen) -->
+        <div id="hud-screen" class="absolute top-0 left-0 w-full p-6 flex justify-between items-start hidden z-40">
+            <div class="bg-gray-800 bg-opacity-70 backdrop-blur-md px-6 py-3 rounded-2xl border border-gray-600 shadow-lg flex items-center gap-4">
+                <div class="text-yellow-400 text-4xl">🏆</div>
+                <div class="flex flex-col">
+                    <span class="text-gray-400 text-sm uppercase tracking-wider">Score</span>
+                    <span id="score-display" class="text-white text-4xl font-bold font-mono">0</span>
+                </div>
+            </div>
+            
+            <div class="flex gap-4">
+                <button id="mute-btn" class="bg-gray-800 bg-opacity-70 p-4 rounded-full text-white text-2xl hover:bg-gray-700 pointer-events-auto border border-gray-600 shadow-lg">
+                    🔊
+                </button>
+                <div class="bg-gray-800 bg-opacity-70 backdrop-blur-md px-6 py-3 rounded-2xl border border-gray-600 shadow-lg flex items-center gap-4">
+                    <div class="text-blue-400 text-4xl">⏱️</div>
+                    <div class="flex flex-col">
+                        <span class="text-gray-400 text-sm uppercase tracking-wider">Time</span>
+                        <span id="time-display" class="text-white text-4xl font-bold font-mono">60</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- OUT OF FRAME WARNING -->
+        <div id="warning-screen" class="absolute bottom-10 bg-red-600 bg-opacity-90 text-white px-8 py-3 rounded-full text-xl font-bold animate-bounce hidden z-40 border-2 border-white shadow-[0_0_15px_rgba(220,38,38,1)]">
+            ⚠️ ไม่พบมือ! กรุณายืนให้อยู่ในระยะกล้อง
+        </div>
+
+        <!-- GAME OVER SCREEN -->
+        <div id="game-over-screen" class="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-50 hidden pointer-events-auto">
+            <h2 class="text-6xl font-bold text-red-500 mb-2 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">หมดเวลา!</h2>
+            <p class="text-2xl text-white mb-8">การฝึกฝนนินจาเสร็จสิ้น</p>
+            
+            <div class="bg-gray-800 p-8 rounded-3xl border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.4)] text-center mb-10 w-80">
+                <p class="text-gray-400 text-lg mb-2">คะแนนรวมของคุณ</p>
+                <p id="final-score" class="text-7xl text-yellow-400 font-bold font-mono mb-4">0</p>
+                <p id="rank-display" class="text-2xl text-green-400 font-bold">ยอดเยี่ยมนินจา!</p>
+            </div>
+
+            <!-- Hand Hover Button for Restart -->
+            <div class="relative group">
+                <svg class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 -z-10 opacity-50" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="#4ade80" stroke-width="4" stroke-dasharray="283" stroke-dashoffset="283" id="restart-progress-circle" class="transition-all duration-100 ease-linear"></circle>
+                </svg>
+                <button id="restart-btn" class="px-8 py-4 bg-gray-700 text-white text-2xl rounded-full font-bold border-2 border-gray-500 flex flex-col items-center justify-center w-40 h-40 hover:bg-gray-600">
+                    <span>เล่นอีกครั้ง</span>
+                    <span class="text-sm text-green-400 mt-2 font-normal">(วางมือแช่ไว้)</span>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Web Audio Synthesizer ---
+        const AudioSynth = {
+            ctx: null,
+            isMuted: false,
+            
+            init: function() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            },
+            
+            toggleMute: function() {
+                this.isMuted = !this.isMuted;
+                return this.isMuted;
+            },
+
+            playSlash: function() {
+                if (this.isMuted || !this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                // Wind swoosh sound
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.15);
+                
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.5, t + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.15);
+            },
+
+            playScore: function() {
+                if (this.isMuted || !this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                // Happy plink sound
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(880, t); // A5
+                osc.frequency.setValueAtTime(1108.73, t + 0.05); // C#6
+                
+                gain.gain.setValueAtTime(0.3, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.3);
+            },
+
+            playBomb: function() {
+                if (this.isMuted || !this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                // Low buzzer sound
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.exponentialRampToValueAtTime(50, t + 0.4);
+                
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.4);
+            },
+
+            playGameOver: function() {
+                if (this.isMuted || !this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(440, t);
+                osc.frequency.exponentialRampToValueAtTime(220, t + 0.3);
+                osc.frequency.setValueAtTime(220, t + 0.3);
+                osc.frequency.exponentialRampToValueAtTime(110, t + 0.8);
+                
+                gain.gain.setValueAtTime(0.3, t);
+                gain.gain.linearRampToValueAtTime(0, t + 1);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(t);
+                osc.stop(t + 1);
+            }
+        };
+
+        // --- Game Setup & State Management ---
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        
+        // UI Elements
+        const uiStartScreen = document.getElementById('start-screen');
+        const uiStartBtn = document.getElementById('start-btn');
+        const uiLoading = document.getElementById('loading-indicator');
+        const uiStartHint = document.getElementById('start-hint');
+        const uiHudScreen = document.getElementById('hud-screen');
+        const uiScore = document.getElementById('score-display');
+        const uiTime = document.getElementById('time-display');
+        const uiWarning = document.getElementById('warning-screen');
+        const uiGameOverScreen = document.getElementById('game-over-screen');
+        const uiFinalScore = document.getElementById('final-score');
+        const uiRank = document.getElementById('rank-display');
+        const uiRestartBtn = document.getElementById('restart-btn');
+        const uiRestartCircle = document.getElementById('restart-progress-circle');
+        const uiMuteBtn = document.getElementById('mute-btn');
+
+        // Game State
+        let GAME_STATE = 'INIT'; // INIT, START, PLAY, OVER
+        let score = 0;
+        let timeLeft = 60;
+        let lastTime = Date.now();
+        let gameTimerId = null;
+        
+        // Resize canvas to fill screen
+        function resizeCanvas() {
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Game Data (Fruits and Bombs)
+        const itemsData = [
+            { emoji: '🍎', word: 'Apple', type: 'fruit', color: '#ff3333' },
+            { emoji: '🍌', word: 'Banana', type: 'fruit', color: '#ffd700' },
+            { emoji: '🍉', word: 'Watermelon', type: 'fruit', color: '#ff4d4d' },
+            { emoji: '🍇', word: 'Grapes', type: 'fruit', color: '#9933ff' },
+            { emoji: '🍊', word: 'Orange', type: 'fruit', color: '#ff9900' },
+            { emoji: '🍓', word: 'Strawberry', type: 'fruit', color: '#ff0066' },
+            { emoji: '💣', word: 'BOMB!', type: 'bomb', color: '#333333' },
+            { emoji: '🥤', word: 'Soda!', type: 'bomb', color: '#666666' } // Unhealthy = bomb logic
+        ];
+
+        let activeItems = [];
+        let particles = [];
+        let textPopups = [];
+        
+        // Hand Tracking Data
+        let handLandmarks = null;
+        let fingerTrail = []; // To draw the neon ninja blade
+        const MAX_TRAIL_LENGTH = 8;
+        
+        // Hover mechanism for restart button
+        let hoverProgress = 0;
+        let isHoveringRestart = false;
+
+        class Item {
+            constructor() {
+                const data = itemsData[Math.floor(Math.random() * itemsData.length)];
+                this.emoji = data.emoji;
+                this.word = data.word;
+                this.type = data.type;
+                this.color = data.color;
+                
+                this.radius = window.innerWidth < 768 ? 40 : 65; // Larger fruits
+                
+                // Start from bottom
+                this.x = (window.innerWidth * 0.2) + Math.random() * (window.innerWidth * 0.6);
+                this.y = window.innerHeight + this.radius + 10;
+                
+                // Upward velocity & slight side movement
+                const jumpForce = window.innerHeight < 800 ? 15 : 20;
+                this.vy = -jumpForce - (Math.random() * 5); 
+                this.vx = (Math.random() - 0.5) * 6;
+                
+                this.gravity = 0.25;
+                this.rotation = 0;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.2;
+                
+                this.isSliced = false;
+            }
+
+            update() {
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.rotation += this.rotationSpeed;
+            }
+
+            draw(ctx) {
+                if (this.isSliced) return;
+                
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                
+                // Outer glow
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 20;
+                
+                ctx.font = `${this.radius * 1.5}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, 0, 0);
+                
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 15;
+                this.vy = (Math.random() - 0.5) * 15;
+                this.life = 1.0;
+                this.color = color;
+                this.size = Math.random() * 10 + 5;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 0.03;
+            }
+            draw(ctx) {
+                if (this.life <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class TextPopup {
+            constructor(x, y, text, color) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.life = 1.0;
+                this.vy = -2;
+            }
+            update() {
+                this.y += this.vy;
+                this.life -= 0.015;
+            }
+            draw(ctx) {
+                if (this.life <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.font = "bold 40px Mitr, sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillStyle = "#ffffff";
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 4;
+                ctx.strokeText(this.text, this.x, this.y);
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        function spawnItem() {
+            if (GAME_STATE !== 'PLAY') return;
+            activeItems.push(new Item());
+            
+            // Random spawn interval based on score to increase difficulty
+            const baseTime = 1000;
+            const decrease = Math.min(score * 10, 600); 
+            setTimeout(spawnItem, baseTime - decrease + (Math.random() * 500));
+        }
+
+        function createExplosion(x, y, color, count = 20) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        function startGame() {
+            AudioSynth.init();
+            GAME_STATE = 'PLAY';
+            score = 0;
+            timeLeft = 60;
+            activeItems = [];
+            particles = [];
+            textPopups = [];
+            fingerTrail = [];
+            
+            uiStartScreen.classList.add('hidden');
+            uiGameOverScreen.classList.add('hidden');
+            uiHudScreen.classList.remove('hidden');
+            uiScore.innerText = score;
+            uiTime.innerText = timeLeft;
+            
+            lastTime = Date.now();
+            setTimeout(spawnItem, 1000);
+            
+            gameTimerId = setInterval(() => {
+                if(GAME_STATE === 'PLAY') {
+                    timeLeft--;
+                    uiTime.innerText = timeLeft;
+                    
+                    // Color change near end
+                    if(timeLeft <= 10) {
+                        uiTime.classList.add('text-red-500');
+                    } else {
+                        uiTime.classList.remove('text-red-500');
+                    }
+
+                    if(timeLeft <= 0) {
+                        endGame();
+                    }
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            GAME_STATE = 'OVER';
+            clearInterval(gameTimerId);
+            AudioSynth.playGameOver();
+            
+            uiHudScreen.classList.add('hidden');
+            uiWarning.classList.add('hidden');
+            uiGameOverScreen.classList.remove('hidden');
+            
+            uiFinalScore.innerText = score;
+            
+            let rankText = "";
+            if (score > 1500) rankText = "ตำนานนินจา! 👑";
+            else if (score > 800) rankText = "นินจาระดับสูง! 🥷";
+            else if (score > 300) rankText = "นินจาฝึกหัด ⚔️";
+            else rankText = "ชาวบ้านธรรมดา 🧑‍🌾";
+            
+            uiRank.innerText = rankText;
+            hoverProgress = 0;
+            updateRestartCircle();
+        }
+
+        function onResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Draw Video Image with Mirror Effect
+            canvasCtx.translate(canvasElement.width, 0);
+            canvasCtx.scale(-1, 1);
+            if (results.image) {
+                // Ensure video covers canvas
+                const vRatio = canvasElement.width / canvasElement.height;
+                const iRatio = results.image.width / results.image.height;
+                let drawWidth, drawHeight, offsetX = 0, offsetY = 0;
+
+                if (vRatio > iRatio) {
+                    drawWidth = canvasElement.width;
+                    drawHeight = canvasElement.width / iRatio;
+                    offsetY = (canvasElement.height - drawHeight) / 2;
+                } else {
+                    drawHeight = canvasElement.height;
+                    drawWidth = canvasElement.height * iRatio;
+                    offsetX = (canvasElement.width - drawWidth) / 2;
+                }
+                
+                // Darken video slightly for better contrast with neon
+                canvasCtx.globalAlpha = 0.5;
+                canvasCtx.drawImage(results.image, offsetX, offsetY, drawWidth, drawHeight);
+                canvasCtx.globalAlpha = 1.0;
+            }
+            
+            // Flip back for drawing UI/Game objects so text isn't backwards
+            canvasCtx.restore();
+
+            let foundHand = false;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                foundHand = true;
+                
+                // Get the first hand
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Mirror the X coordinate for logic (since we flipped the video visually, 
+                // the raw landmarks x needs to be inverted to match screen pixels naturally)
+                
+                // Index finger tip (landmark 8)
+                const indexTip = landmarks[8];
+                const rawX = indexTip.x; // 0 to 1
+                const x = (1 - rawX) * canvasElement.width; // Flipped mapping
+                const y = indexTip.y * canvasElement.height;
+                
+                // Update Blade Trail
+                fingerTrail.push({x, y});
+                if (fingerTrail.length > MAX_TRAIL_LENGTH) {
+                    fingerTrail.shift();
+                }
+
+                // Draw Neon Skeleton (Wrist to Fingers)
+                drawNeonSkeleton(landmarks);
+                
+                // Draw Blade Trail
+                drawBlade();
+
+                // Logic based on state
+                if (GAME_STATE === 'PLAY') {
+                    checkCollisions(x, y);
+                } else if (GAME_STATE === 'OVER') {
+                    checkRestartHover(x, y);
+                }
+
+            } else {
+                // Hand lost
+                fingerTrail = [];
+                isHoveringRestart = false;
+            }
+
+            // Warning UI if hand lost during play
+            if (GAME_STATE === 'PLAY') {
+                if (!foundHand) {
+                    uiWarning.classList.remove('hidden');
+                } else {
+                    uiWarning.classList.add('hidden');
+                }
+            }
+
+            // Draw Game Objects
+            updateAndDrawGameObjects();
+
+        }
+
+        function drawNeonSkeleton(landmarks) {
+            canvasCtx.save();
+            // Connections array for hand
+            const connections = [
+                [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+                [0, 5], [5, 6], [6, 7], [7, 8], // Index
+                [5, 9], [9, 10], [10, 11], [11, 12], // Middle
+                [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+                [13, 17], [0, 17], [17, 18], [18, 19], [19, 20] // Pinky & Palm
+            ];
+
+            canvasCtx.strokeStyle = "rgba(0, 255, 255, 0.6)"; // Neon Cyan
+            canvasCtx.lineWidth = 3;
+            canvasCtx.lineCap = "round";
+            canvasCtx.shadowColor = "#00ffff";
+            canvasCtx.shadowBlur = 10;
+
+            canvasCtx.beginPath();
+            for (let i = 0; i < connections.length; i++) {
+                const startIdx = connections[i][0];
+                const endIdx = connections[i][1];
+                
+                const startX = (1 - landmarks[startIdx].x) * canvasElement.width;
+                const startY = landmarks[startIdx].y * canvasElement.height;
+                const endX = (1 - landmarks[endIdx].x) * canvasElement.width;
+                const endY = landmarks[endIdx].y * canvasElement.height;
+
+                canvasCtx.moveTo(startX, startY);
+                canvasCtx.lineTo(endX, endY);
+            }
+            canvasCtx.stroke();
+            
+            // Draw joint dots
+            canvasCtx.fillStyle = "#ffffff";
+            for (let i = 0; i < landmarks.length; i++) {
+                const lx = (1 - landmarks[i].x) * canvasElement.width;
+                const ly = landmarks[i].y * canvasElement.height;
+                canvasCtx.beginPath();
+                canvasCtx.arc(lx, ly, 4, 0, Math.PI * 2);
+                canvasCtx.fill();
+            }
+            canvasCtx.restore();
+        }
+
+        function drawBlade() {
+            if (fingerTrail.length < 2) return;
+            
+            canvasCtx.save();
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(fingerTrail[0].x, fingerTrail[0].y);
+            
+            for (let i = 1; i < fingerTrail.length; i++) {
+                // Smooth curve interpolation could be added here, but lines are okay for speed
+                canvasCtx.lineTo(fingerTrail[i].x, fingerTrail[i].y);
+            }
+            
+            // Styling the ninja blade
+            canvasCtx.lineJoin = 'round';
+            canvasCtx.lineCap = 'round';
+            canvasCtx.strokeStyle = '#ffffff';
+            canvasCtx.lineWidth = 15;
+            canvasCtx.shadowColor = '#4ade80'; // Neon Green blade
+            canvasCtx.shadowBlur = 20;
+            canvasCtx.stroke();
+            
+            // Core thinner line
+            canvasCtx.strokeStyle = '#4ade80';
+            canvasCtx.lineWidth = 6;
+            canvasCtx.shadowBlur = 0;
+            canvasCtx.stroke();
+            
+            canvasCtx.restore();
+        }
+
+        function updateAndDrawGameObjects() {
+            // Update and Draw Items
+            for (let i = activeItems.length - 1; i >= 0; i--) {
+                const item = activeItems[i];
+                item.update();
+                item.draw(canvasCtx);
+                
+                // Remove if off screen bottom
+                if (item.y > canvasElement.height + item.radius * 2) {
+                    activeItems.splice(i, 1);
+                }
+            }
+
+            // Update and Draw Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw(canvasCtx);
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Update and Draw Text Popups
+            for (let i = textPopups.length - 1; i >= 0; i--) {
+                const tp = textPopups[i];
+                tp.update();
+                tp.draw(canvasCtx);
+                if (tp.life <= 0) textPopups.splice(i, 1);
+            }
+        }
+
+        function checkCollisions(tipX, tipY) {
+            // Need at least some velocity to count as a slice (prevent resting hand on spawn point)
+            if (fingerTrail.length < 3) return;
+            
+            // Calculate distance between current tip and point 2 frames ago
+            const pastPoint = fingerTrail[fingerTrail.length - 3];
+            const dxLine = tipX - pastPoint.x;
+            const dyLine = tipY - pastPoint.y;
+            const velocity = Math.sqrt(dxLine*dxLine + dyLine*dyLine);
+            
+            // Only slice if hand is moving fast enough
+            if (velocity < 20) return; 
+
+            for (let i = activeItems.length - 1; i >= 0; i--) {
+                const item = activeItems[i];
+                if (item.isSliced) continue;
+
+                // Simple circle collision
+                const dx = tipX - item.x;
+                const dy = tipY - item.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < item.radius + 15) {
+                    item.isSliced = true;
+                    
+                    // Visuals
+                    createExplosion(item.x, item.y, item.color, 30);
+                    
+                    if (item.type === 'bomb') {
+                        // Penalize
+                        score = Math.max(0, score - 50);
+                        textPopups.push(new TextPopup(item.x, item.y, "-50", "#ef4444"));
+                        AudioSynth.playBomb();
+                        
+                        // Shake camera effect (css)
+                        document.body.style.transform = 'translate(10px, 10px)';
+                        setTimeout(()=> document.body.style.transform = 'translate(-10px, -10px)', 50);
+                        setTimeout(()=> document.body.style.transform = 'translate(0px, 0px)', 100);
+
+                    } else {
+                        // Reward
+                        score += 10;
+                        textPopups.push(new TextPopup(item.x, item.y, item.word, "#4ade80"));
+                        textPopups.push(new TextPopup(item.x, item.y - 40, "+10", "#fbbf24"));
+                        AudioSynth.playScore();
+                        AudioSynth.playSlash();
+                    }
+                    
+                    uiScore.innerText = score;
+                    
+                    // Remove item
+                    activeItems.splice(i, 1);
+                }
+            }
+        }
+
+        function checkRestartHover(x, y) {
+            // Get center of screen where restart button is
+            const centerX = canvasElement.width / 2;
+            const centerY = canvasElement.height / 2;
+            
+            // Define hover zone (roughly the size of the button)
+            const dx = x - centerX;
+            const dy = y - (centerY + 100); // adjusted for visual center of button
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < 100) {
+                isHoveringRestart = true;
+                hoverProgress += 2; // Increase progress (approx 50 frames to fill)
+                
+                if (hoverProgress >= 100) {
+                    hoverProgress = 0;
+                    startGame();
+                }
+            } else {
+                isHoveringRestart = false;
+                hoverProgress = Math.max(0, hoverProgress - 4); // Decay quickly
+            }
+            updateRestartCircle();
+        }
+
+        function updateRestartCircle() {
+            // Total dash array is 283 (2 * pi * r, where r=45)
+            // Dash offset decreases to show progress
+            const maxOffset = 283;
+            const currentOffset = maxOffset - (hoverProgress / 100) * maxOffset;
+            uiRestartCircle.setAttribute('stroke-dashoffset', currentOffset);
+            
+            if (isHoveringRestart) {
+                uiRestartCircle.setAttribute('stroke', '#facc15'); // Yellow while loading
+            } else {
+                uiRestartCircle.setAttribute('stroke', '#4ade80'); // Green default
+            }
+        }
+
+        // MediaPipe Initialization
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+        hands.setOptions({
+            maxNumHands: 1, // Only 1 hand to keep it simple and performant
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 1280,
+            height: 720
+        });
+
+        // Start Camera
+        camera.start()
+            .then(() => {
+                uiLoading.classList.add('hidden');
+                uiStartBtn.classList.remove('hidden');
+                uiStartHint.classList.remove('hidden');
+                GAME_STATE = 'START';
+                
+                // Keep calling requestAnimationFrame to keep drawing video even before game starts
+                const loop = () => {
+                    // Note: onResults is called by Camera utility automatically when frames arrive.
+                    // But if camera hasn't triggered onResults yet, canvas might be empty.
+                    // The drawing logic is inside onResults.
+                    requestAnimationFrame(loop);
+                };
+                loop();
+            })
+            .catch((err) => {
+                console.error("Camera access denied or failed.", err);
+                uiLoading.innerHTML = `<p class='text-red-500 text-xl font-bold'>ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตให้ใช้งานกล้องครับ 📷</p>`;
+            });
+
+        // Button Event Listeners
+        uiStartBtn.addEventListener('click', () => {
+            startGame();
+        });
+
+        uiRestartBtn.addEventListener('click', () => {
+            // Fallback for mouse click in case hover is hard
+            startGame();
+        });
+
+        uiMuteBtn.addEventListener('click', () => {
+            const isMuted = AudioSynth.toggleMute();
+            uiMuteBtn.innerText = isMuted ? '🔇' : '🔊';
+            if (!isMuted) AudioSynth.init(); // Ensure context is awake
+        });
+
+    </script>
+</body>
+</html>
