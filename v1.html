@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR นับนิ้วมหาสนุก | AI สั่ง ครูยี</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Mitr', sans-serif;
+            background-color: #0f172a;
+            color: white;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            touch-action: none;
+        }
+        
+        /* Mirror Video and Canvas */
+        .mirror {
+            transform: scaleX(-1);
+        }
+
+        .screen-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            z-index: 10;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .hidden-screen {
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+        }
+
+        .hud-top {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .hud-element {
+            pointer-events: auto;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(8px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 9999px;
+            padding: 0.75rem 1.5rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        .target-box {
+            position: absolute;
+            top: 25%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            border: 3px solid #38bdf8;
+            border-radius: 2rem;
+            padding: 2rem;
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
+            pointer-events: none;
+        }
+
+        .emoji-display {
+            font-size: 5rem;
+            line-height: 1.2;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            max-width: 80vw;
+        }
+
+        .finger-status {
+            position: absolute;
+            bottom: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* Circular Progress for Hover Duration */
+        .progress-ring {
+            width: 120px;
+            height: 120px;
+            transform: rotate(-90deg);
+        }
+        
+        .progress-ring-circle {
+            stroke-dasharray: 314; /* 2 * pi * r (r=50) */
+            stroke-dashoffset: 314;
+            transition: stroke-dashoffset 0.1s linear;
+        }
+
+        .finger-count-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            font-weight: bold;
+            color: #4ade80;
+            text-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
+        }
+
+        .btn-primary {
+            background: linear-gradient(to right, #3b82f6, #06b6d4);
+            transition: all 0.2s;
+        }
+        .btn-primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+        }
+
+        #warningMsg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(239, 68, 68, 0.9);
+            padding: 1rem 2rem;
+            border-radius: 1rem;
+            font-size: 1.5rem;
+            z-index: 30;
+            display: none;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.05); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        /* Confetti effect for correctness */
+        .correct-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(74, 222, 128, 0.3);
+            z-index: 15;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let isMuted = false;
+
+        function playSound(type) {
+            if (isMuted) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'tick') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } 
+            else if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now); // A4
+                osc.frequency.setValueAtTime(554.37, now + 0.1); // C#5
+                osc.frequency.setValueAtTime(659.25, now + 0.2); // E5
+                gainNode.gain.setValueAtTime(0.5, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            }
+            else if (type === 'over') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 1);
+                gainNode.gain.setValueAtTime(0.5, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 1);
+                osc.start(now);
+                osc.stop(now + 1);
+            }
+            else if (type === 'progress') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.05);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            }
+        }
+    </script>
+
+    <!-- Start Screen -->
+    <div id="startScreen" class="screen-container">
+        <div class="glass-panel text-center max-w-2xl w-11/12">
+            <h1 class="text-5xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
+                🖐️ AR นับนิ้วมหาสนุก!
+            </h1>
+            <p class="text-xl mb-6 text-gray-200">
+                เรียนรู้การนับจำนวนผักและสัตว์ต่างๆ โดยการ <b>"ชูนิ้ว"</b> ให้ตรงกับจำนวนที่เห็นหน้าจอ<br>
+                ชูนิ้วค้างไว้สักแป๊บเพื่อตอบคำถาม เก็บแต้มให้ได้มากที่สุดใน 2 นาที!
+            </p>
+            
+            <div class="bg-slate-800/50 p-4 rounded-xl mb-8 text-left text-sm text-gray-300">
+                <p class="mb-2 text-yellow-300 font-semibold">⚠️ ข้อแนะนำการตั้งกล้อง:</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>ยืนห่างจากกล้องให้เห็นมือชัดเจนทั้ง 2 ข้าง (ถ้าต้องชูเกิน 5 นิ้ว)</li>
+                    <li>อยู่ในที่ที่มีแสงสว่างเพียงพอ ไม่ย้อนแสง</li>
+                    <li>เมื่อระบบจับมือได้ จะมีเส้นสีนีออนปรากฏขึ้นบนมือ</li>
+                </ul>
+            </div>
+
+            <button id="btnStart" class="btn-primary text-white font-bold py-4 px-10 rounded-full text-2xl shadow-lg w-full md:w-auto">
+                ▶️ เริ่มเกมเลย!
+            </button>
+            <p id="loadingModelText" class="mt-4 text-yellow-400 font-semibold animate-pulse hidden">
+                ⏳ กำลังโหลดระบบ AI ตรวจจับมือ...
+            </p>
+        </div>
+    </div>
+
+    <!-- Play Screen (HUD & Video/Canvas) -->
+    <div id="playScreen" class="hidden-screen">
+        <video id="videoElement" class="game-canvas mirror" autoplay playsinline></video>
+        <canvas id="outputCanvas" class="game-canvas mirror"></canvas>
+        <div id="correctFlash" class="correct-flash"></div>
+
+        <div class="hud-top">
+            <div class="hud-element text-green-400 border-green-400">
+                ⭐ คะแนน: <span id="scoreDisplay">0</span>
+            </div>
+            <div class="hud-element text-blue-400 border-blue-400 cursor-pointer" onclick="toggleMute()">
+                <span id="muteIcon">🔊</span>
+            </div>
+            <div class="hud-element text-yellow-400 border-yellow-400">
+                ⏱️ <span id="timeDisplay">2:00</span>
+            </div>
+        </div>
+
+        <div id="targetContainer" class="target-box hidden">
+            <h2 class="text-2xl font-bold mb-2 text-white drop-shadow-md">มีกี่ตัวเอ่ย? ชูนิ้วเลย!</h2>
+            <div id="emojiBox" class="emoji-display">🍎🍎🍎</div>
+        </div>
+
+        <div id="warningMsg">⚠️ ไม่พบมือ! ยกมือขึ้นมาหน้ากล้องเลย!</div>
+
+        <div class="finger-status hidden" id="statusContainer">
+            <div class="relative">
+                <svg class="progress-ring">
+                    <circle cx="60" cy="60" r="50" fill="transparent" stroke="rgba(255,255,255,0.2)" stroke-width="8"></circle>
+                    <circle id="progressCircle" class="progress-ring-circle" cx="60" cy="60" r="50" fill="transparent" stroke="#4ade80" stroke-width="8" stroke-linecap="round"></circle>
+                </svg>
+                <div id="detectedFingersText" class="finger-count-text">0</div>
+            </div>
+            <div class="text-white bg-slate-800/80 px-4 py-2 rounded-full font-semibold border border-slate-600 shadow-lg">
+                จำนวนนิ้วที่นับได้
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="hidden-screen screen-container">
+        <div class="glass-panel text-center max-w-xl w-11/12">
+            <h1 class="text-5xl font-bold mb-2 text-red-400">หมดเวลา! ⏰</h1>
+            <p class="text-2xl mb-8 text-gray-200">เก่งมากเลย! มาดูคะแนนกัน</p>
+            
+            <div class="bg-slate-800 p-8 rounded-2xl mb-8 border border-slate-600">
+                <div class="text-gray-400 text-lg mb-2">คะแนนของคุณคือ</div>
+                <div class="text-7xl font-bold text-green-400" id="finalScore">0</div>
+            </div>
+
+            <button id="btnRestart" class="btn-primary text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg w-full">
+                🔄 เล่นอีกครั้ง
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Game Constants & Variables
+        const GAME_DURATION = 120; // seconds
+        const HOLD_DURATION_REQUIRED = 1500; // ms required to hold fingers to answer
+        const EMOJI_LIST = ['🍎', '🍌', '🍓', '🥕', '🥦', '🐶', '🐱', '🐼', '🐸', '🦁'];
+        
+        let score = 0;
+        let timeLeft = GAME_DURATION;
+        let timerInterval;
+        let currentTargetNumber = 0;
+        
+        let isPlaying = false;
+        let isModelLoaded = false;
+        
+        // Holding logic
+        let holdStartTime = 0;
+        let isHoldingCorrect = false;
+
+        // Elements
+        const startScreen = document.getElementById('startScreen');
+        const playScreen = document.getElementById('playScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const videoElement = document.getElementById('videoElement');
+        const outputCanvas = document.getElementById('outputCanvas');
+        const canvasCtx = outputCanvas.getContext('2d');
+        
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const targetContainer = document.getElementById('targetContainer');
+        const emojiBox = document.getElementById('emojiBox');
+        const statusContainer = document.getElementById('statusContainer');
+        const detectedFingersText = document.getElementById('detectedFingersText');
+        const progressCircle = document.getElementById('progressCircle');
+        const warningMsg = document.getElementById('warningMsg');
+        const correctFlash = document.getElementById('correctFlash');
+        const finalScore = document.getElementById('finalScore');
+        const loadingModelText = document.getElementById('loadingModelText');
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            document.getElementById('muteIcon').innerText = isMuted ? '🔇' : '🔊';
+        }
+
+        // --- Game Flow Functions ---
+        function generateNewQuestion() {
+            // Random number 1 to 10
+            currentTargetNumber = Math.floor(Math.random() * 10) + 1;
+            
+            // Random emoji
+            const selectedEmoji = EMOJI_LIST[Math.floor(Math.random() * EMOJI_LIST.length)];
+            
+            // Create string
+            let displayStr = '';
+            for(let i=0; i<currentTargetNumber; i++) {
+                displayStr += selectedEmoji;
+            }
+            emojiBox.innerHTML = displayStr;
+            
+            // Reset hold state
+            isHoldingCorrect = false;
+            holdStartTime = 0;
+            updateProgress(0);
+        }
+
+        function startGame() {
+            startScreen.classList.add('hidden-screen');
+            gameOverScreen.classList.add('hidden-screen');
+            playScreen.classList.remove('hidden-screen');
+            
+            score = 0;
+            timeLeft = GAME_DURATION;
+            updateHUD();
+            generateNewQuestion();
+            
+            targetContainer.classList.remove('hidden');
+            statusContainer.classList.remove('hidden');
+            
+            isPlaying = true;
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateHUD();
+                
+                if (timeLeft <= 5 && timeLeft > 0) playSound('tick'); // Tick for last 5 secs
+                
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(timerInterval);
+            playSound('over');
+            
+            playScreen.classList.add('hidden-screen');
+            gameOverScreen.classList.remove('hidden-screen');
+            finalScore.innerText = score;
+            
+            targetContainer.classList.add('hidden');
+            statusContainer.classList.add('hidden');
+            warningMsg.style.display = 'none';
+        }
+
+        function updateHUD() {
+            scoreDisplay.innerText = score;
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timeDisplay.innerText = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        }
+
+        function triggerCorrect() {
+            score += 10;
+            updateHUD();
+            playSound('correct');
+            
+            // Flash effect
+            correctFlash.style.opacity = '1';
+            setTimeout(() => { correctFlash.style.opacity = '0'; }, 300);
+            
+            generateNewQuestion();
+        }
+
+        function updateProgress(percentage) {
+            // circumference = 314
+            const offset = 314 - (percentage / 100) * 314;
+            progressCircle.style.strokeDashoffset = offset;
+            
+            // Change color based on progress
+            if (percentage === 0) {
+                progressCircle.style.stroke = "transparent";
+            } else {
+                progressCircle.style.stroke = "#4ade80"; // Green
+                if(percentage % 20 < 5) playSound('progress'); // Little tick while holding
+            }
+        }
+
+        function countFingers(landmarks, handednessLabel) {
+            let count = 0;
+            // Handedness from MediaPipe is based on Camera perspective.
+            // Since we mirror the canvas visually via CSS, we process logic normally.
+            const isLeft = handednessLabel === 'Left';
+
+            // 1. Thumb (Compare X coords of Tip(4) and IP(3))
+            // Left hand (unmirrored data): thumb tip x > ip x if open
+            // Right hand (unmirrored data): thumb tip x < ip x if open
+            if (isLeft) {
+                if (landmarks[4].x > landmarks[3].x) count++;
+            } else {
+                if (landmarks[4].x < landmarks[3].x) count++;
+            }
+
+            // 2. Fingers: Index, Middle, Ring, Pinky 
+            // Compare Y coords of Tip (8,12,16,20) vs PIP (6,10,14,18)
+            // Note: y=0 is top, y=1 is bottom. So tip.y < pip.y means finger is raised.
+            const tips = [8, 12, 16, 20];
+            const pips = [6, 10, 14, 18];
+            
+            for (let i = 0; i < 4; i++) {
+                if (landmarks[tips[i]].y < landmarks[pips[i]].y) {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        function onResults(results) {
+            if (!isModelLoaded) {
+                isModelLoaded = true;
+                loadingModelText.classList.add('hidden');
+                document.getElementById('btnStart').innerText = "▶️ เริ่มเกมเลย!";
+                document.getElementById('btnStart').disabled = false;
+            }
+
+            // Ensure canvas matches video size for accurate drawing
+            outputCanvas.width = videoElement.videoWidth;
+            outputCanvas.height = videoElement.videoHeight;
+            
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+            
+            let totalFingers = 0;
+            let handsDetected = false;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handsDetected = true;
+                warningMsg.style.display = 'none';
+
+                for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                    const landmarks = results.multiHandLandmarks[i];
+                    const handedness = results.multiHandedness[i].label; // "Left" or "Right"
+                    
+                    // Count fingers
+                    totalFingers += countFingers(landmarks, handedness);
+
+                    // Draw Neon Skeleton
+                    canvasCtx.shadowBlur = 15;
+                    canvasCtx.shadowColor = "#38bdf8"; // Cyan glow
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#38bdf8', lineWidth: 4});
+                    
+                    canvasCtx.shadowColor = "#fcd34d"; // Yellow glow for joints
+                    drawLandmarks(canvasCtx, landmarks, {color: '#fcd34d', lineWidth: 2, radius: 4});
+                }
+            } else if (isPlaying) {
+                warningMsg.style.display = 'block';
+            }
+            canvasCtx.restore();
+
+            if (isPlaying) {
+                detectedFingersText.innerText = totalFingers;
+
+                // Collision/Hover Loading Logic
+                if (handsDetected && totalFingers === currentTargetNumber) {
+                    if (!isHoldingCorrect) {
+                        isHoldingCorrect = true;
+                        holdStartTime = performance.now();
+                    }
+                    
+                    const heldTime = performance.now() - holdStartTime;
+                    let progress = (heldTime / HOLD_DURATION_REQUIRED) * 100;
+                    
+                    if (progress >= 100) {
+                        progress = 100;
+                        triggerCorrect();
+                    }
+                    updateProgress(progress);
+                } else {
+                    isHoldingCorrect = false;
+                    updateProgress(0);
+                }
+            }
+        }
+
+        // Initialize MediaPipe Hands
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+        
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
+        hands.onResults(onResults);
+
+        // Initialize Camera
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 1280,
+            height: 720
+        });
+
+        document.getElementById('btnStart').addEventListener('click', () => {
+            // First time click initializes AudioContext to bypass browser restrictions
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            startGame();
+        });
+
+        document.getElementById('btnRestart').addEventListener('click', () => {
+            startGame();
+        });
+
+        // Start Camera and Model loading on page load
+        window.onload = () => {
+            document.getElementById('btnStart').disabled = true;
+            loadingModelText.classList.remove('hidden');
+            camera.start().catch(err => {
+                alert("ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตให้เบราว์เซอร์ใช้งานกล้องครับ");
+            });
+        };
+
+    </script>
+</body>
+</html>
