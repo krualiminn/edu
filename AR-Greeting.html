@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Greeting AR Challenge</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;800&family=Fredoka+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- MediaPipe Hands & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body { font-family: 'Kanit', sans-serif; }
+        .font-game { font-family: 'Fredoka One', cursive, 'Kanit'; }
+        
+        /* Glassmorphism effects */
+        .glass-panel {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        
+        .pulse-text {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+            50% { transform: scale(1.05); text-shadow: 0 0 20px rgba(255,255,255,1); }
+            100% { transform: scale(1); text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        }
+
+        /* Loading spinner */
+        .loader {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #14b8a6;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-900 text-white overflow-hidden w-screen h-screen select-none">
+
+    <div id="app" class="relative w-full h-full flex items-center justify-center">
+        
+        <!-- Hidden Video Element for MediaPipe input -->
+        <video id="webcam" class="hidden" autoplay playsinline></video>
+        
+        <!-- Main Game Canvas (Drawing Video, AI Skeletons, and Game Objects) -->
+        <canvas id="gameCanvas" class="absolute top-0 left-0 w-full h-full z-0"></canvas>
+
+        <!-- Warning HUD (Out of camera) -->
+        <div id="outOfBoundsWarning" class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none hidden transition-opacity duration-300">
+            <div class="bg-red-600/80 text-white px-8 py-4 rounded-3xl text-3xl font-bold font-game border-4 border-red-400 animate-pulse flex items-center gap-4 shadow-[0_0_50px_rgba(220,38,38,0.8)]">
+                <i class="fa-solid fa-hand-paper"></i> มองไม่เห็นมือของคุณ! ยกมือขึ้นหน่อย
+            </div>
+        </div>
+
+        <!-- In-Game HUD (Score, Time, Mute) -->
+        <div id="hud" class="absolute top-0 left-0 w-full p-6 flex justify-between items-start z-10 pointer-events-none hidden">
+            <div class="flex flex-col gap-2">
+                <div class="glass-panel px-6 py-3 rounded-2xl flex items-center gap-3 text-2xl font-game font-bold text-teal-400">
+                    <i class="fa-solid fa-star text-yellow-400"></i> Score: <span id="scoreDisplay">0</span>
+                </div>
+                <div id="streakBadge" class="glass-panel px-4 py-1 rounded-xl text-lg font-bold text-orange-400 opacity-0 transition-opacity">
+                    Combo x<span id="streakDisplay">1</span>! 🔥
+                </div>
+            </div>
+            
+            <div class="glass-panel px-8 py-4 rounded-3xl flex items-center gap-3 text-4xl font-game font-bold text-white border-b-4 border-rose-500">
+                <i class="fa-regular fa-clock text-rose-400"></i> <span id="timeDisplay">60</span>s
+            </div>
+
+            <div class="pointer-events-auto">
+                <button id="muteBtn" class="glass-panel w-14 h-14 rounded-full flex items-center justify-center text-xl hover:bg-white/20 transition hover:scale-110 active:scale-95">
+                    <i class="fa-solid fa-volume-high"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="absolute inset-0 bg-slate-900/90 z-30 flex flex-col items-center justify-center backdrop-blur-sm">
+            <h1 class="text-6xl md:text-7xl font-game font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-400 mb-6 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] text-center">
+                English Greeting<br><span class="text-5xl text-yellow-400">AR Challenge 👋</span>
+            </h1>
+            
+            <div class="glass-panel p-8 rounded-3xl max-w-2xl text-center mb-8 border-t-4 border-teal-500">
+                <h3 class="text-2xl font-bold mb-4 text-teal-300"><i class="fa-solid fa-gamepad"></i> วิธีการเล่น (How to play)</h3>
+                <ul class="text-lg text-gray-200 space-y-3 text-left list-disc list-inside">
+                    <li>อ่านคำถามสถานการณ์ที่ปรากฏบนหน้าจอ</li>
+                    <li><strong>ยกมือของคุณขึ้น</strong> หน้ากล้องเว็บแคม</li>
+                    <li>ใช้ <strong>นิ้วชี้ (Index Finger)</strong> เลื่อนไปชี้ที่ฟองอากาศคำตอบที่ถูกต้อง</li>
+                    <li><strong>แช่มือค้างไว้ 1.5 วินาที</strong> เพื่อยืนยันคำตอบ (ระบบป้องกันการกดพลาด)</li>
+                </ul>
+            </div>
+
+            <div id="loadingStatus" class="flex flex-col items-center gap-4">
+                <div class="loader"></div>
+                <p class="text-xl text-teal-400 font-semibold animate-pulse">กำลังเตรียมระบบ AI ตรวจจับมือ... (กรุณาอนุญาตกล้อง)</p>
+            </div>
+
+            <button id="startBtn" class="hidden pulse-text bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-game font-bold text-3xl px-12 py-5 rounded-full shadow-[0_0_30px_rgba(20,184,166,0.6)] hover:scale-105 hover:shadow-[0_0_50px_rgba(20,184,166,0.9)] transition-all active:scale-95 border-b-8 border-teal-700">
+                START GAME <i class="fa-solid fa-play ml-2"></i>
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="absolute inset-0 bg-slate-900/95 z-30 flex flex-col items-center justify-center backdrop-blur-md hidden">
+            <h2 class="text-6xl font-game font-bold text-rose-500 mb-2 drop-shadow-[0_0_20px_rgba(244,63,94,0.5)]">TIME'S UP!</h2>
+            <p class="text-2xl text-gray-300 mb-8 font-game">จบเกมแล้วจ้า!</p>
+            
+            <div class="glass-panel p-10 rounded-3xl text-center mb-10 border-4 border-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.3)]">
+                <p class="text-xl text-gray-300 mb-2 font-semibold">คะแนนรวมของคุณ (Total Score)</p>
+                <div class="text-8xl font-game font-bold text-yellow-400 drop-shadow-lg mb-4" id="finalScoreDisplay">0</div>
+                
+                <div class="flex justify-center gap-8 mt-6 border-t border-white/20 pt-6">
+                    <div>
+                        <p class="text-gray-400 text-sm">ตอบถูก (Correct)</p>
+                        <p class="text-3xl font-bold text-teal-400" id="correctCountDisplay">0</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm">ตอบผิด (Wrong)</p>
+                        <p class="text-3xl font-bold text-rose-400" id="wrongCountDisplay">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <button id="restartBtn" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-game font-bold text-2xl px-10 py-4 rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)] hover:scale-105 transition-all active:scale-95 border-b-8 border-purple-700">
+                <i class="fa-solid fa-rotate-right mr-2"></i> PLAY AGAIN
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Web Audio Synthesizer (No external files needed) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let isMuted = false;
+
+        const Synth = {
+            playTone: function(freq, type, duration, vol=0.1) {
+                if(isMuted) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            },
+            hoverTick: function() { this.playTone(800, 'sine', 0.1, 0.05); },
+            correct: function() {
+                if(isMuted) return;
+                const t = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                
+                // Happy ascending arpeggio
+                osc.frequency.setValueAtTime(440, t); // A4
+                osc.frequency.setValueAtTime(554.37, t + 0.1); // C#5
+                osc.frequency.setValueAtTime(659.25, t + 0.2); // E5
+                osc.frequency.setValueAtTime(880, t + 0.3); // A5
+                
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.5);
+                
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(t); osc.stop(t + 0.5);
+            },
+            wrong: function() {
+                if(isMuted) return;
+                const t = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                
+                // Sad descending buzz
+                osc.frequency.setValueAtTime(300, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.4);
+                
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.4);
+                
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(t); osc.stop(t + 0.4);
+            },
+            gameOver: function() {
+                setTimeout(() => this.playTone(523.25, 'square', 0.2, 0.1), 0);
+                setTimeout(() => this.playTone(659.25, 'square', 0.2, 0.1), 200);
+                setTimeout(() => this.playTone(783.99, 'square', 0.4, 0.1), 400);
+                setTimeout(() => this.playTone(1046.50, 'square', 0.8, 0.15), 600);
+            }
+        };
+
+        // Mute Button Logic
+        const muteBtn = document.getElementById('muteBtn');
+        muteBtn.addEventListener('click', () => {
+            isMuted = !isMuted;
+            muteBtn.innerHTML = isMuted ? '<i class="fa-solid fa-volume-xmark text-red-400"></i>' : '<i class="fa-solid fa-volume-high"></i>';
+            if(!isMuted && audioCtx.state === 'suspended') audioCtx.resume();
+        });
+
+        // Game Database
+        const questionDB = [
+            { q: "ทักทายตอนเช้า ☀️", a: "Good morning", w: ["Good night", "Good afternoon"] },
+            { q: "ทักทายตอนบ่าย 🌤️", a: "Good afternoon", w: ["Good evening", "Goodbye"] },
+            { q: "ทักทายตอนเย็น 🌆", a: "Good evening", w: ["Good night", "Good morning"] },
+            { q: "บอกลาก่อนเข้านอน 🌙", a: "Good night", w: ["Hello", "Good afternoon"] },
+            { q: "เจอเพื่อนสนิท 👋", a: "Hello / Hi", w: ["Thank you", "Sorry"] },
+            { q: "บอกลาเพื่อนก่อนกลับบ้าน 🚶", a: "Goodbye", w: ["Good morning", "Nice to meet you"] },
+            { q: "เมื่อต้องการขอบคุณ 🙏", a: "Thank you", w: ["Sorry", "Please"] },
+            { q: "เมื่อทำผิดและขอโทษ 🥺", a: "I'm sorry", w: ["Thank you", "You're welcome"] },
+            { q: "ยินดีที่ได้รู้จัก 🤝", a: "Nice to meet you", w: ["See you later", "I'm fine"] },
+            { q: "เจอกันใหม่นะ 🕰️", a: "See you later", w: ["Good morning", "How are you?"] }
+        ];
+
+        // Game State Variables
+        let gameState = 'START'; // START, PLAY, OVER
+        let score = 0;
+        let streak = 0;
+        let timeLeft = 60;
+        let stats = { correct: 0, wrong: 0 };
+        let gameTimer = null;
+        let currentQuestion = null;
+        let bubbles = []; // Array of answer bubbles
+        
+        // Settings
+        const GAME_DURATION = 60; // Seconds
+        const HOVER_REQUIREMENT = 1.2; // Seconds to hold on answer to select
+        const BUBBLE_RADIUS = window.innerWidth < 768 ? 60 : 80; // Adaptive radius
+
+        // Canvas Setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const videoElement = document.getElementById('webcam');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Hand Skeleton Connections Mapping
+        const HAND_CONNECTIONS = [
+            [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+            [0, 5], [5, 6], [6, 7], [7, 8], // Index
+            [5, 9], [9, 10], [10, 11], [11, 12], // Middle
+            [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+            [13, 17], [0, 17], [17, 18], [18, 19], [19, 20] // Pinky
+        ];
+
+        // Initialize MediaPipe Hands
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+        
+        hands.setOptions({
+            maxNumHands: 1, // Only need 1 hand for control to reduce complexity
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
+
+        hands.onResults(onAIResults);
+
+        // Initialize Camera
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+
+        // Start Camera early to load AI
+        camera.start().then(() => {
+            document.getElementById('loadingStatus').classList.add('hidden');
+            document.getElementById('startBtn').classList.remove('hidden');
+        }).catch(err => {
+            const loadingStatus = document.getElementById('loadingStatus');
+            loadingStatus.innerHTML = `
+                <div class="bg-rose-900/90 border-l-8 border-rose-500 text-rose-100 p-6 rounded-2xl shadow-[0_0_30px_rgba(225,29,72,0.6)] flex items-center gap-6 max-w-xl text-left mt-4 backdrop-blur-md transition-all">
+                    <i class="fa-solid fa-video-slash text-5xl animate-bounce"></i>
+                    <div>
+                        <h4 class="font-game font-bold text-2xl mb-2 text-rose-300">กล้องถูกบล็อก! (Permission Denied)</h4>
+                        <p class="text-lg">ระบบต้องการกล้องเว็บแคมเพื่อเล่นเกม AR<br>กรุณากด <b>"อนุญาต" (Allow)</b> สิทธิ์การใช้กล้องที่แถบ URL ด้านบน แล้วกดรีเฟรชหน้าจอ (F5) อีกครั้งครับ</p>
+                    </div>
+                </div>
+            `;
+            loadingStatus.classList.remove('animate-pulse');
+        });
+
+        let lastTime = performance.now();
+        let handMissingTimer = 0;
+        let pointerPos = { x: -1000, y: -1000, visible: false };
+
+        function onAIResults(results) {
+            const currentTime = performance.now();
+            const deltaTime = (currentTime - lastTime) / 1000; // seconds
+            lastTime = currentTime;
+
+            // 1. Clear & Draw Mirrored Video Background
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.save();
+            // MIRROR MAGIC: Flip context horizontally to draw video like a mirror
+            ctx.scale(-1, 1);
+            ctx.translate(-canvas.width, 0);
+            
+            // Draw video to fill canvas (cover)
+            const vRatio = videoElement.videoWidth / videoElement.videoHeight;
+            const cRatio = canvas.width / canvas.height;
+            let drawW, drawH, drawX, drawY;
+            
+            if (cRatio > vRatio) {
+                drawW = canvas.width; drawH = canvas.width / vRatio;
+                drawX = 0; drawY = (canvas.height - drawH) / 2;
+            } else {
+                drawW = canvas.height * vRatio; drawH = canvas.height;
+                drawX = (canvas.width - drawW) / 2; drawY = 0;
+            }
+            
+            // Draw dark overlay to make game UI pop
+            ctx.drawImage(results.image, drawX, drawY, drawW, drawH);
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.4)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore(); // Restore context to NORMAL (unmirrored) for UI drawing
+
+            // 2. Process Hand Tracking Data
+            pointerPos.visible = false;
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handMissingTimer = 0;
+                const landmarks = results.multiHandLandmarks[0]; // Get first hand
+                
+                // Draw Neon Skeleton
+                drawNeonSkeleton(landmarks);
+
+                // Get Index Finger Tip (Landmark 8) for game interaction
+                // IMPORTANT: We must mirror the X coordinate manually since we restored the canvas context!
+                pointerPos.x = (1 - landmarks[8].x) * canvas.width;
+                pointerPos.y = landmarks[8].y * canvas.height;
+                pointerPos.visible = true;
+
+                // Draw Pointer Reticle
+                drawPointer(pointerPos.x, pointerPos.y);
+            } else {
+                handMissingTimer += deltaTime;
+            }
+
+            // Warning UI if hand missing during PLAY
+            if (gameState === 'PLAY') {
+                const warningHUD = document.getElementById('outOfBoundsWarning');
+                if (handMissingTimer > 1.5) {
+                    warningHUD.classList.remove('hidden');
+                } else {
+                    warningHUD.classList.add('hidden');
+                }
+            }
+
+            // 3. Process Game Logic & Draw UI based on state
+            if (gameState === 'PLAY' && currentQuestion) {
+                drawQuestionHUD();
+                processBubbles(deltaTime);
+            }
+        }
+
+        function drawNeonSkeleton(landmarks) {
+            ctx.save();
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // Draw connections
+            ctx.beginPath();
+            ctx.strokeStyle = '#2dd4bf'; // Teal-400
+            ctx.shadowColor = '#2dd4bf';
+            ctx.shadowBlur = 15;
+
+            HAND_CONNECTIONS.forEach(conn => {
+                const p1 = landmarks[conn[0]];
+                const p2 = landmarks[conn[1]];
+                // Mirror X manually: (1 - x)
+                ctx.moveTo((1 - p1.x) * canvas.width, p1.y * canvas.height);
+                ctx.lineTo((1 - p2.x) * canvas.width, p2.y * canvas.height);
+            });
+            ctx.stroke();
+
+            // Draw joints
+            ctx.fillStyle = '#fde047'; // Yellow-300
+            ctx.shadowColor = '#fde047';
+            ctx.shadowBlur = 10;
+            landmarks.forEach((lm, index) => {
+                ctx.beginPath();
+                // Make finger tips bigger
+                const r = [4, 8, 12, 16, 20].includes(index) ? 6 : 3;
+                ctx.arc((1 - lm.x) * canvas.width, lm.y * canvas.height, r, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+
+        function drawPointer(x, y) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, 15, 0, Math.PI * 2);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#fff';
+            ctx.shadowBlur = 20;
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#f43f5e'; // Rose
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawQuestionHUD() {
+            ctx.save();
+            const boxWidth = Math.min(canvas.width * 0.8, 600);
+            const boxHeight = 100;
+            const x = (canvas.width - boxWidth) / 2;
+            const y = 120; // Below HTML HUD
+
+            // Glassmorphism Box for Question
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.roundRect(x, y, boxWidth, boxHeight, 20);
+            ctx.fill();
+            
+            ctx.strokeStyle = 'rgba(45, 212, 191, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Text
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 0;
+            ctx.font = "bold 32px 'Kanit', sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(currentQuestion.q, canvas.width / 2, y + boxHeight / 2);
+            ctx.restore();
+        }
+
+        function processBubbles(dt) {
+            let isHoveringAny = false;
+
+            for (let i = 0; i < bubbles.length; i++) {
+                const b = bubbles[i];
+                
+                // Draw Bubble
+                ctx.save();
+                
+                // Float animation
+                b.animOffset += dt * 2;
+                const floatY = Math.sin(b.animOffset) * 15;
+                const currentY = b.y + floatY;
+
+                // Collision detection (Pointer vs Circle)
+                const dist = pointerPos.visible ? Math.hypot(pointerPos.x - b.x, pointerPos.y - currentY) : Infinity;
+                const isHovered = dist < b.radius;
+                
+                if (isHovered) {
+                    isHoveringAny = true;
+                    b.hoverTime += dt;
+                    // Play subtle tick sound occasionally when progressing
+                    if (Math.floor(b.hoverTime * 10) % 3 === 0 && dt > 0) Synth.hoverTick();
+                } else {
+                    b.hoverTime = Math.max(0, b.hoverTime - dt * 2); // Quick decay if pointer leaves
+                }
+
+                const progressRatio = Math.min(b.hoverTime / HOVER_REQUIREMENT, 1);
+
+                // Styling based on hover state
+                ctx.beginPath();
+                ctx.arc(b.x, currentY, b.radius, 0, Math.PI * 2);
+                ctx.fillStyle = isHovered ? 'rgba(45, 212, 191, 0.9)' : 'rgba(30, 41, 59, 0.8)';
+                ctx.shadowColor = isHovered ? '#2dd4bf' : 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = isHovered ? 30 : 10;
+                ctx.fill();
+                
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = isHovered ? '#fff' : '#2dd4bf';
+                ctx.stroke();
+
+                // Draw Text
+                ctx.fillStyle = '#fff';
+                ctx.shadowBlur = 0;
+                ctx.font = "bold 24px 'Fredoka One', 'Kanit', sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                // Handle text wrapping if needed, but keeping it simple for short greetings
+                ctx.fillText(b.text, b.x, currentY);
+
+                // Draw Progress Ring (The Loading Circle)
+                if (b.hoverTime > 0) {
+                    ctx.beginPath();
+                    ctx.arc(b.x, currentY, b.radius + 15, -Math.PI/2, -Math.PI/2 + (Math.PI * 2 * progressRatio));
+                    ctx.lineWidth = 8;
+                    ctx.lineCap = 'round';
+                    // Color transitions from yellow to green
+                    ctx.strokeStyle = progressRatio > 0.7 ? '#22c55e' : '#eab308';
+                    ctx.stroke();
+                }
+                ctx.restore();
+
+                // Trigger Answer!
+                if (progressRatio >= 1) {
+                    handleAnswer(b.isCorrect);
+                    return; // Stop processing other bubbles this frame
+                }
+            }
+        }
+
+        function generateQuestion() {
+            // Pick random question
+            const qObj = questionDB[Math.floor(Math.random() * questionDB.length)];
+            currentQuestion = qObj;
+            
+            // Prepare Answers (1 Correct, 1 Wrong for simplicity and fit on screen)
+            // Or 3 answers (1 Correct, 2 Wrong). Let's use 3 for challenge!
+            let answers = [
+                { text: qObj.a, isCorrect: true },
+                { text: qObj.w[0], isCorrect: false },
+                { text: qObj.w[1] || qObj.w[0], isCorrect: false } // fallback if only 1 wrong provided
+            ];
+            // Shuffle
+            answers.sort(() => Math.random() - 0.5);
+
+            // Layout Calculation
+            const num = answers.length;
+            const spacing = canvas.width / (num + 1);
+            const yPos = canvas.height * 0.65; // Lower half of screen
+
+            bubbles = answers.map((ans, index) => ({
+                text: ans.text,
+                isCorrect: ans.isCorrect,
+                x: spacing * (index + 1),
+                y: yPos,
+                radius: BUBBLE_RADIUS,
+                hoverTime: 0,
+                animOffset: Math.random() * Math.PI * 2 // Random float starting phase
+            }));
+        }
+
+        function handleAnswer(isCorrect) {
+            // Clear current bubbles to prevent double triggers
+            bubbles = []; 
+            
+            if (isCorrect) {
+                Synth.correct();
+                streak++;
+                score += 10 + (streak * 2); // Bonus for streak
+                stats.correct++;
+                
+                // Show Streak UI
+                if (streak > 1) {
+                    const sb = document.getElementById('streakBadge');
+                    document.getElementById('streakDisplay').innerText = streak;
+                    sb.style.opacity = 1;
+                    setTimeout(() => { sb.style.opacity = 0; }, 1500);
+                }
+            } else {
+                Synth.wrong();
+                streak = 0;
+                stats.wrong++;
+                // Create screen flash effect
+                const flash = document.createElement('div');
+                flash.className = 'absolute inset-0 bg-red-500/40 z-20 pointer-events-none transition-opacity duration-300';
+                document.getElementById('app').appendChild(flash);
+                setTimeout(() => flash.remove(), 300);
+            }
+
+            document.getElementById('scoreDisplay').innerText = score;
+            
+            // Briefly pause before next question
+            setTimeout(generateQuestion, 500);
+        }
+
+        function startGame() {
+            // Init audio context if suspended (Browser policy)
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            // Reset Stats
+            score = 0;
+            streak = 0;
+            timeLeft = GAME_DURATION;
+            stats = { correct: 0, wrong: 0 };
+            document.getElementById('scoreDisplay').innerText = score;
+            document.getElementById('timeDisplay').innerText = timeLeft;
+            
+            // UI Transition
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            
+            gameState = 'PLAY';
+            generateQuestion();
+
+            // Timer Loop
+            clearInterval(gameTimer);
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timeDisplay').innerText = timeLeft;
+                
+                // Color timer red when low
+                if(timeLeft <= 10) {
+                    document.getElementById('timeDisplay').classList.add('text-rose-500', 'animate-pulse');
+                    Synth.playTone(400, 'square', 0.1, 0.05); // Tick sound
+                } else {
+                    document.getElementById('timeDisplay').classList.remove('text-rose-500', 'animate-pulse');
+                }
+
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            clearInterval(gameTimer);
+            gameState = 'OVER';
+            currentQuestion = null;
+            bubbles = [];
+            
+            Synth.gameOver();
+
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('outOfBoundsWarning').classList.add('hidden');
+            
+            // Update End Screen Stats
+            document.getElementById('finalScoreDisplay').innerText = score;
+            document.getElementById('correctCountDisplay').innerText = stats.correct;
+            document.getElementById('wrongCountDisplay').innerText = stats.wrong;
+            
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+
+        // Event Listeners
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+
+    </script>
+</body>
+</html>
