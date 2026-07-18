@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Astro-Nose Rocket - โยกหลบอุกกาบาตสุดเร้าใจ</title>
+    <!-- Tailwind CSS for UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for Thai & English -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Pose and Camera utilities -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #03001e;
+            color: #f4f4f4;
+            overflow-x: hidden;
+        }
+        .orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        /* Neon glowing text and effects */
+        .neon-text-blue {
+            text-shadow: 0 0 10px rgba(0, 191, 255, 0.8), 0 0 20px rgba(0, 191, 255, 0.5);
+        }
+        .neon-text-red {
+            text-shadow: 0 0 10px rgba(255, 0, 128, 0.8), 0 0 20px rgba(255, 0, 128, 0.5);
+        }
+        .neon-border-blue {
+            box-shadow: 0 0 15px rgba(0, 191, 255, 0.4);
+            border: 2px solid rgba(0, 191, 255, 0.8);
+        }
+        /* Glassmorphism utility */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* Hide camera element visually, but keep for rendering */
+        #webcam {
+            transform: scaleX(-1);
+            display: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-gradient-to-b from-[#020010] via-[#0b0b28] to-[#020010]">
+
+    <!-- Background Starfield Animation Overlay -->
+    <div class="absolute inset-0 z-0 pointer-events-none opacity-40">
+        <div class="absolute top-1/4 left-1/4 w-2 h-2 bg-white rounded-full animate-ping" style="animation-duration: 3s;"></div>
+        <div class="absolute top-1/3 right-1/4 w-3 h-3 bg-cyan-400 rounded-full animate-ping" style="animation-duration: 4s;"></div>
+        <div class="absolute bottom-1/4 left-1/3 w-1.5 h-1.5 bg-purple-500 rounded-full animate-ping" style="animation-duration: 5s;"></div>
+        <div class="absolute bottom-1/3 right-1/3 w-2.5 h-2.5 bg-pink-500 rounded-full animate-ping" style="animation-duration: 6s;"></div>
+    </div>
+
+    <!-- Main Game Container -->
+    <div class="w-full max-w-5xl z-10 flex flex-col items-center">
+        <!-- Header / Logo -->
+        <header class="text-center mb-4">
+            <h1 class="text-4xl md:text-5xl font-extrabold tracking-wider orbitron text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-pink-500 to-indigo-500 uppercase neon-text-blue">
+                AR Astro-Nose Rocket
+            </h1>
+            <p class="text-xs md:text-sm text-cyan-300 mt-1 uppercase tracking-widest font-semibold">
+                ครูยี AR Motion Game Dev • ควงจมูกกู้เอกภพ
+            </p>
+        </header>
+
+        <!-- Main Workspace: Camera & Settings Side-by-Side -->
+        <div class="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            
+            <!-- LEFT PANEL: Instructions & Settings (4 Cols) -->
+            <div class="lg:col-span-4 flex flex-col gap-4">
+                
+                <!-- Game Status & Sound Toggle -->
+                <div class="glass-panel rounded-2xl p-4 flex items-center justify-between">
+                    <span class="text-sm font-semibold tracking-wide text-cyan-300">ระบบเสียงสังเคราะห์</span>
+                    <button id="btn-mute" class="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 font-bold text-xs hover:from-cyan-500 hover:to-indigo-600 transition-all duration-300 flex items-center gap-2 shadow-lg shadow-indigo-500/30">
+                        <span id="sound-icon">🔊</span> <span id="sound-text">เปิดเสียง</span>
+                    </button>
+                </div>
+
+                <!-- How To Play Instructions -->
+                <div class="glass-panel rounded-2xl p-5 flex-grow flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-pink-500 mb-3 border-b border-pink-500/30 pb-2 flex items-center gap-2">
+                            🎮 วิธีการควบคุมและกติกา
+                        </h3>
+                        <ul class="space-y-3 text-sm text-slate-300">
+                            <li class="flex items-start gap-2">
+                                <span class="text-cyan-400 mt-1 font-bold">✨</span>
+                                <span><strong>จมูกของคุณ</strong> คือจุดบังคับพวงมาลัยจรวด ยานจะบินตามตำแหน่งจมูกของคุณแบบสะท้อนเงา</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-rose-400 mt-1 font-bold">☄️</span>
+                                <span><strong>หลบหลีกอุกกาบาต</strong> สีแดงและสีส้มที่จะร่วงลงมาเรื่อย ๆ การชนหนึ่งครั้งจะสูญเสียพลังงานเกราะ!</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-cyan-400 mt-1 font-bold">💎</span>
+                                <span><strong>เก็บคริสตัลพลังงาน</strong> สีฟ้าและสีม่วงเพื่อฟื้นฟูเกราะป้องกันและอัปเกรดคะแนนเป็นทวีคูณ</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-amber-400 mt-1 font-bold">🔥</span>
+                                <span><strong>ความเร็วทวีคูณ:</strong> ยิ่งรอดชีวิตได้นานเท่าใด อุกกาบาตจะยิ่งตกลงมาเร็วและหนาแน่นขึ้นเท่านั้น!</span>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="mt-6 p-3 bg-cyan-950/40 rounded-xl border border-cyan-500/20 text-xs text-cyan-200">
+                        <span class="font-bold text-cyan-400">💡 เคล็ดลับจากครูยี:</span> ขยับศีรษะและลำคอให้พริ้วไหวในระดับที่สบายตัว ไม่จำเป็นต้องโยกทั้งตัวแรงเกินไปนะครับ ป้องกันอาการเวียนหัวครับ 😄
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: Primary Game Screen (8 Cols) -->
+            <div class="lg:col-span-8 flex flex-col gap-4 relative">
+                
+                <!-- Setup / Calibration Box (If Nose Not Detected) -->
+                <div id="calibration-warning" class="hidden absolute top-4 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-md glass-panel border-rose-500/50 rounded-2xl p-3 text-center animate-bounce">
+                    <p class="text-rose-400 text-sm font-semibold flex items-center justify-center gap-2">
+                        ⚠️ ไม่พบพิกัดจมูกของคุณ! กรุณายืนให้อยู่ในกรอบกล้องและแสงสว่างเพียงพอ
+                    </p>
+                </div>
+
+                <!-- Main Canvas Screen Wrapper -->
+                <div class="relative w-full rounded-2xl overflow-hidden neon-border-blue bg-black shadow-2xl ratio-16-9 flex justify-center items-center" style="min-height: 480px;">
+                    
+                    <!-- Webcam Stream (Hidden but Processing) -->
+                    <video id="webcam" width="640" height="480" autoplay playsinline></video>
+                    
+                    <!-- Main WebGL/2D Canvas Overlay -->
+                    <canvas id="game-canvas" width="640" height="480" class="w-full h-full object-cover"></canvas>
+
+                    <!-- START SCREEN OVERLAY -->
+                    <div id="screen-start" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 p-6 text-center">
+                        <div class="animate-pulse mb-4 text-6xl text-cyan-400">🛸</div>
+                        <h2 class="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 mb-2 uppercase tracking-wide">
+                            พร้อมเริ่มบินหรือยัง?
+                        </h2>
+                        <p class="text-slate-300 text-sm md:text-base max-w-md mb-8">
+                            เมื่อกดยืนยัน ระบบจะขออนุญาตใช้งานกล้องเว็บแคม เพื่อทำการวิเคราะห์พิกัดจมูกของคุณผ่านชุดโมเดล AI คุณภาพสูง
+                        </p>
+
+                        <!-- Difficulty Selection -->
+                        <div class="mb-8 w-full max-w-sm">
+                            <label class="block text-cyan-400 text-xs font-bold uppercase tracking-wider mb-2">เลือกระดับความท้าทาย</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button onclick="setDifficulty('easy')" id="diff-easy" class="diff-btn py-2 px-3 rounded-xl bg-slate-800 text-xs font-bold hover:bg-slate-700 transition border border-slate-600">
+                                    ระดับง่าย
+                                </button>
+                                <button onclick="setDifficulty('medium')" id="diff-medium" class="diff-btn py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-xs font-bold transition border border-cyan-400">
+                                    ปานกลาง
+                                </button>
+                                <button onclick="setDifficulty('hard')" id="diff-hard" class="diff-btn py-2 px-3 rounded-xl bg-slate-800 text-xs font-bold hover:bg-slate-700 transition border border-slate-600">
+                                    ท้าทายสูง
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Main Start Button -->
+                        <button id="btn-start" class="px-8 py-4 rounded-full bg-gradient-to-r from-cyan-500 via-purple-600 to-pink-500 hover:from-pink-500 hover:to-cyan-500 font-extrabold text-lg text-white shadow-xl shadow-cyan-500/25 transition-all duration-300 transform hover:scale-105 active:scale-95 flex items-center gap-3">
+                            🚀 เริ่มเชื่อมต่อกล้องและเล่นเกม
+                        </button>
+                        
+                        <div id="camera-loading-text" class="hidden mt-4 text-xs text-cyan-300 animate-pulse">
+                            กำลังโหลดโมเดลปัญญาประดิษฐ์และเปิดกล้องสักครู่...
+                        </div>
+                    </div>
+
+                    <!-- GAME OVER OVERLAY -->
+                    <div id="screen-game-over" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/95 p-6 text-center">
+                        <div class="text-6xl mb-4 animate-bounce">💥</div>
+                        <h2 class="text-4xl font-extrabold text-rose-500 uppercase tracking-widest neon-text-red mb-2">
+                            ยานจรวดถูกทำลาย!
+                        </h2>
+                        <p class="text-sm text-slate-400 max-w-sm mb-6">
+                            คุณประคับประคองยานอวกาศฝ่าพายุดาวเคราะห์น้อยได้อย่างสมเกียรติ และนี่คือความสำเร็จของคุณในรอบนี้!
+                        </p>
+
+                        <!-- Highscore Display Box -->
+                        <div class="glass-panel border-cyan-500/30 rounded-2xl p-6 w-full max-w-sm mb-8 grid grid-cols-2 gap-4">
+                            <div>
+                                <span class="text-xs text-slate-400 block uppercase font-semibold">คะแนนที่ได้</span>
+                                <span id="final-score" class="text-3xl font-extrabold text-cyan-300 orbitron">0</span>
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-400 block uppercase font-semibold">เวลาที่รอดชีวิต</span>
+                                <span id="final-time" class="text-3xl font-extrabold text-pink-400 orbitron">0s</span>
+                            </div>
+                        </div>
+
+                        <!-- Hover/Hover-to-restart Visual Circle bar -->
+                        <div class="flex flex-col items-center gap-4">
+                            <button id="btn-restart" class="px-8 py-3 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-indigo-600 hover:to-cyan-500 font-extrabold text-md text-white shadow-lg transition-all transform hover:scale-105">
+                                🔄 ท้าทายใหม่อีกครั้ง
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HUD Info Elements for Stats Display during Game -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="glass-panel rounded-xl p-3 text-center">
+                        <span class="text-[10px] text-cyan-400 uppercase tracking-wider font-semibold block">คะแนนสะสม</span>
+                        <span id="hud-score" class="text-xl font-black orbitron text-white">0000</span>
+                    </div>
+                    <div class="glass-panel rounded-xl p-3 text-center">
+                        <span class="text-[10px] text-pink-400 uppercase tracking-wider font-semibold block">เวลาวิกฤต</span>
+                        <span id="hud-timer" class="text-xl font-black orbitron text-white">0.0s</span>
+                    </div>
+                    <div class="glass-panel rounded-xl p-3 text-center">
+                        <span class="text-[10px] text-amber-400 uppercase tracking-wider font-semibold block">เกราะพลังงาน (HP)</span>
+                        <div class="w-full bg-slate-800 rounded-full h-3 mt-1.5 overflow-hidden">
+                            <div id="hud-shield-bar" class="bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 h-full w-full transition-all duration-300"></div>
+                        </div>
+                    </div>
+                    <div class="glass-panel rounded-xl p-3 text-center">
+                        <span class="text-[10px] text-cyan-300 uppercase tracking-wider font-semibold block">ตัวคูณความเร็วอุกกาบาต</span>
+                        <span id="hud-multiplier" class="text-xl font-black orbitron text-cyan-300">1.0x</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-8 text-center text-xs text-slate-500 pb-8">
+            <p>ออกแบบโดยผู้เชี่ยวชาญ Creative Coding • พัฒนาด้วยเทคโนโลยี AI การจดจำท่าทางแบบบูรณาการ</p>
+            <p class="mt-1">© 2026 AI สั่ง ครูยี สอนสร้างสื่อ AR 😊. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- Web Audio Synthesis Engine ---
+        let audioCtx = null;
+        let isMuted = false;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // Play synth beep sound (Collect Item / UI Click)
+        function playSoundBeep(freq = 600, duration = 0.1, type = 'sine') {
+            if (isMuted) return;
+            initAudio();
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                // Pitch sweep for collect effect
+                if (freq > 400) {
+                    osc.frequency.exponentialRampToValueAtTime(freq * 1.5, audioCtx.currentTime + duration);
+                }
+                
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                console.warn("Audio Context Error", e);
+            }
+        }
+
+        // Play synth explosion/hit sound
+        function playSoundExplosion() {
+            if (isMuted) return;
+            initAudio();
+            try {
+                const duration = 0.4;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + duration);
+                
+                gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                console.warn("Audio Context Error", e);
+            }
+        }
+
+        // Play level/checkpoint synth tune
+        function playSoundLevelUp() {
+            if (isMuted) return;
+            initAudio();
+            try {
+                const now = audioCtx.currentTime;
+                const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                    gain.gain.setValueAtTime(0.1, now + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.15);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.12);
+                    osc.stop(now + idx * 0.12 + 0.15);
+                });
+            } catch (e) {
+                console.warn("Audio Context Error", e);
+            }
+        }
+
+        // Mute button logic
+        const btnMute = document.getElementById('btn-mute');
+        const soundIcon = document.getElementById('sound-icon');
+        const soundText = document.getElementById('sound-text');
+        
+        btnMute.addEventListener('click', () => {
+            isMuted = !isMuted;
+            if (isMuted) {
+                soundIcon.innerText = '🔇';
+                soundText.innerText = 'ปิดเสียงอยู่';
+                btnMute.className = 'px-4 py-2 rounded-xl bg-slate-800 font-bold text-xs transition-all duration-300 flex items-center gap-2 border border-slate-700 text-slate-400';
+            } else {
+                initAudio();
+                soundIcon.innerText = '🔊';
+                soundText.innerText = 'เปิดเสียง';
+                btnMute.className = 'px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 font-bold text-xs hover:from-cyan-500 hover:to-indigo-600 transition-all duration-300 flex items-center gap-2 shadow-lg shadow-indigo-500/30 text-white';
+                playSoundBeep(520, 0.1);
+            }
+        });
+
+        // --- STREAMING_CHUNK: Setting up global variables and difficulty levels ---
+        // Difficulty Presets
+        const DIFFICULTIES = {
+            easy: { meteorSpawnRate: 0.02, crystalSpawnRate: 0.012, speedMultiplierInc: 0.02, startSpeed: 3 },
+            medium: { meteorSpawnRate: 0.035, crystalSpawnRate: 0.015, speedMultiplierInc: 0.04, startSpeed: 4 },
+            hard: { meteorSpawnRate: 0.05, crystalSpawnRate: 0.015, speedMultiplierInc: 0.06, startSpeed: 5.5 }
+        };
+        let currentDifficulty = 'medium';
+
+        function setDifficulty(level) {
+            currentDifficulty = level;
+            document.querySelectorAll('.diff-btn').forEach(btn => {
+                btn.className = 'diff-btn py-2 px-3 rounded-xl bg-slate-800 text-xs font-bold hover:bg-slate-700 transition border border-slate-600 text-slate-400';
+            });
+            const activeBtn = document.getElementById(`diff-${level}`);
+            if (level === 'easy') {
+                activeBtn.className = 'diff-btn py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-500 text-xs font-bold transition border border-green-400 text-white';
+            } else if (level === 'medium') {
+                activeBtn.className = 'diff-btn py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-xs font-bold transition border border-cyan-400 text-white';
+            } else {
+                activeBtn.className = 'diff-btn py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-xs font-bold transition border border-pink-400 text-white';
+            }
+            playSoundBeep(450, 0.08);
+        }
+
+        // --- STREAMING_CHUNK: Defining MediaPipe and Pose Control variables ---
+        // MediaPipe Pose & DOM Binding
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('game-canvas');
+        const ctx = canvasElement.getContext('2d');
+        const calibrationWarning = document.getElementById('calibration-warning');
+        
+        let pose = null;
+        let camera = null;
+        let lastNoseDetectionTime = 0;
+
+        // Space Rocket Position State
+        let rocketPos = { x: 320, y: 350 };
+        let targetRocketPos = { x: 320, y: 350 };
+        let lastDetectedPoseResults = null;
+
+        // Game Entities
+        let meteors = [];
+        let crystals = [];
+        let particles = [];
+
+        // Game State Variables
+        let score = 0;
+        let hp = 100;
+        let maxHp = 100;
+        let isPlaying = false;
+        let startTime = 0;
+        let elapsedSeconds = 0;
+        let baseSpeed = 4;
+        let speedMultiplier = 1.0;
+        let meteorSpawnTimer = 0;
+        let crystalSpawnTimer = 0;
+
+        // UI Updates
+        const hudScore = document.getElementById('hud-score');
+        const hudTimer = document.getElementById('hud-timer');
+        const hudShieldBar = document.getElementById('hud-shield-bar');
+        const hudMultiplier = document.getElementById('hud-multiplier');
+        
+        const finalScore = document.getElementById('final-score');
+        const finalTime = document.getElementById('final-time');
+
+        // --- STREAMING_CHUNK: Establishing MediaPipe Initialization Functions ---
+        function onResults(results) {
+            lastDetectedPoseResults = results;
+            if (results.poseLandmarks && results.poseLandmarks[0]) {
+                const nose = results.poseLandmarks[0];
+                
+                // Nose coordinate system conversion (Invert X-axis because of mirrored camera display)
+                targetRocketPos.x = (1 - nose.x) * canvasElement.width;
+                targetRocketPos.y = nose.y * canvasElement.height;
+                
+                lastNoseDetectionTime = Date.now();
+                calibrationWarning.classList.add('hidden');
+            } else {
+                // If nose landmark is lost for more than 1.5 seconds, display warning
+                if (Date.now() - lastNoseDetectionTime > 1500 && isPlaying) {
+                    calibrationWarning.classList.remove('hidden');
+                }
+            }
+        }
+
+        // Initialize MediaPipe Pose Model
+        function startMediaPipe() {
+            document.getElementById('camera-loading-text').classList.remove('hidden');
+            
+            pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                smoothSegmentation: false,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+
+            pose.onResults(onResults);
+
+            camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await pose.send({ image: videoElement });
+                },
+                width: 640,
+                height: 480
+            });
+
+            camera.start()
+                .then(() => {
+                    document.getElementById('camera-loading-text').classList.add('hidden');
+                    startGameSession();
+                })
+                .catch((err) => {
+                    alert("ไม่สามารถเข้าถึงกล้องเว็บแคมได้ กรุณาอนุมัติสิทธิ์การใช้งานกล้องในการตั้งค่าเว็บเบราว์เซอร์แล้วลองใหม่อีกครั้งครับ 😊 " + err);
+                    document.getElementById('camera-loading-text').classList.add('hidden');
+                });
+        }
+
+        // --- STREAMING_CHUNK: Structuring Game Entity Creation & Update loop ---
+        function spawnMeteor() {
+            // Generate coordinates and attributes for asteroid
+            const size = Math.random() * 25 + 15; // Random radius between 15 and 40
+            const x = Math.random() * canvasElement.width;
+            const y = -size;
+            const speed = (Math.random() * 2 + baseSpeed) * speedMultiplier;
+            const drift = (Math.random() * 2 - 1) * 0.5; // Slight drift sideways
+            
+            meteors.push({
+                x,
+                y,
+                size,
+                speed,
+                drift,
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.05
+            });
+        }
+
+        function spawnCrystal() {
+            const size = 12;
+            const x = Math.random() * (canvasElement.width - 40) + 20;
+            const y = -size;
+            const speed = (Math.random() * 1.5 + baseSpeed - 1) * speedMultiplier;
+            
+            crystals.push({
+                x,
+                y,
+                size,
+                speed,
+                pulse: 0
+            });
+        }
+
+        function createExplosion(x, y, color, count = 12) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x,
+                    y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    radius: Math.random() * 4 + 2,
+                    color,
+                    alpha: 1,
+                    decay: Math.random() * 0.03 + 0.02
+                });
+            }
+        }
+
+        // --- STREAMING_CHUNK: Drafting Entity Updates and Collision Detections ---
+        function updateGameEntities() {
+            const currentDiffConfig = DIFFICULTIES[currentDifficulty];
+
+            // Increase speed multiplier based on elapsed time
+            elapsedSeconds = ((Date.now() - startTime) / 1000);
+            speedMultiplier = 1.0 + (elapsedSeconds * currentDiffConfig.speedMultiplierInc);
+            baseSpeed = currentDiffConfig.startSpeed;
+
+            // Spawning systems with randomized timing thresholds
+            if (Math.random() < currentDiffConfig.meteorSpawnRate * (speedMultiplier * 0.8)) {
+                spawnMeteor();
+            }
+            if (Math.random() < currentDiffConfig.crystalSpawnRate) {
+                spawnCrystal();
+            }
+
+            // Update Rocket positions smoothly (Linear Interpolation)
+            rocketPos.x += (targetRocketPos.x - rocketPos.x) * 0.22;
+            rocketPos.y += (targetRocketPos.y - rocketPos.y) * 0.22;
+
+            // Clamp rocket position inside canvas viewport bounds
+            rocketPos.x = Math.max(25, Math.min(canvasElement.width - 25, rocketPos.x));
+            rocketPos.y = Math.max(25, Math.min(canvasElement.height - 25, rocketPos.y));
+
+            // Move and Update Meteors
+            for (let i = meteors.length - 1; i >= 0; i--) {
+                const m = meteors[i];
+                m.y += m.speed;
+                m.x += m.drift;
+                m.rotation += m.rotationSpeed;
+
+                // Collision Detection with Spaceship
+                const dist = Math.hypot(m.x - rocketPos.x, m.y - rocketPos.y);
+                if (dist < m.size + 20) { // 20 is approx spaceship radius
+                    // Damage spaceship
+                    hp -= Math.floor(m.size / 2);
+                    playSoundExplosion();
+                    createExplosion(m.x, m.y, '#f43f5e', 20); // Red/Pink particles
+                    
+                    // Remove current meteor
+                    meteors.splice(i, 1);
+                    continue;
+                }
+
+                // Remove out-of-screen meteors
+                if (m.y > canvasElement.height + m.size) {
+                    meteors.splice(i, 1);
+                }
+            }
+
+            // Move and Update Crystals
+            for (let i = crystals.length - 1; i >= 0; i--) {
+                const c = crystals[i];
+                c.y += c.speed;
+                c.pulse += 0.1;
+
+                // Collision Detection with Spaceship
+                const dist = Math.hypot(c.x - rocketPos.x, c.y - rocketPos.y);
+                if (dist < c.size + 20) {
+                    // Score points and recover health/shield
+                    score += 150;
+                    hp = Math.min(maxHp, hp + 10);
+                    playSoundBeep(720, 0.15, 'sine');
+                    createExplosion(c.x, c.y, '#06b6d4', 15); // Cyan/Light blue particles
+                    
+                    crystals.splice(i, 1);
+                    continue;
+                }
+
+                // Remove out-of-screen crystals
+                if (c.y > canvasElement.height + c.size) {
+                    crystals.splice(i, 1);
+                }
+            }
+
+            // Update Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.decay;
+
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Check Game Over Condition
+            if (hp <= 0) {
+                hp = 0;
+                endGameSession();
+            }
+
+            // Periodic Synth Level-Up Indicator Sound
+            if (Math.floor(elapsedSeconds) % 15 === 0 && Math.floor(elapsedSeconds) > 0 && Math.floor(elapsedSeconds) % 15 !== Math.floor(elapsedSeconds - 1) % 15) {
+                playSoundLevelUp();
+            }
+        }
+
+        // --- STREAMING_CHUNK: Constructing Canvas Render and AI Drawing overlays ---
+        function drawCanvas() {
+            ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // 1. Draw Mirror Web Cam Frame to Canvas
+            ctx.save();
+            ctx.translate(canvasElement.width, 0);
+            ctx.scale(-1, 1);
+            ctx.globalAlpha = 0.55; // Slightly faded out webcam feed to make HUD/AR objects stand out
+            ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+            ctx.restore();
+
+            // 2. Draw NEON SKELETON over Webcam Feed (Adds incredible sci-fi tech look)
+            if (lastDetectedPoseResults && lastDetectedPoseResults.poseLandmarks) {
+                ctx.save();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'rgba(0, 255, 170, 0.75)';
+                ctx.shadowColor = 'rgba(0, 255, 170, 0.9)';
+                ctx.shadowBlur = 10;
+
+                // Convert landmarks positions back to Canvas Coordinate (mirrored correctly)
+                const getCoord = (landmark) => {
+                    return {
+                        x: (1 - landmark.x) * canvasElement.width,
+                        y: landmark.y * canvasElement.height
+                    };
+                };
+
+                const landmarks = lastDetectedPoseResults.poseLandmarks;
+                
+                // Draw head shape circle/polygon
+                const nose = getCoord(landmarks[0]);
+                const leftEye = getCoord(landmarks[2]);
+                const rightEye = getCoord(landmarks[5]);
+                const leftShoulder = getCoord(landmarks[11]);
+                const rightShoulder = getCoord(landmarks[12]);
+
+                // Connecting eyes and nose (Face skeleton)
+                ctx.beginPath();
+                ctx.moveTo(leftEye.x, leftEye.y);
+                ctx.lineTo(rightEye.x, rightEye.y);
+                ctx.lineTo(nose.x, nose.y);
+                ctx.closePath();
+                ctx.stroke();
+
+                // Draw small neon dots on nose and eyes
+                ctx.fillStyle = '#00ffff';
+                [leftEye, rightEye].forEach(pt => {
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                // Connecting shoulders (Chest/Body skeleton)
+                ctx.beginPath();
+                ctx.moveTo(leftShoulder.x, leftShoulder.y);
+                ctx.lineTo(rightShoulder.x, rightShoulder.y);
+                ctx.stroke();
+
+                // Draw neon shoulder points
+                ctx.fillStyle = '#ff00ff';
+                [leftShoulder, rightShoulder].forEach(pt => {
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                ctx.restore();
+            }
+
+            // 3. Draw Stars particles inside game arena
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            for (let i = 0; i < 5; i++) {
+                ctx.fillRect(Math.random() * canvasElement.width, Math.random() * canvasElement.height, 1.5, 1.5);
+            }
+
+            // 4. Draw Crystals (Collectibles)
+            crystals.forEach(c => {
+                ctx.save();
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#06b6d4';
+                ctx.fillStyle = '#22d3ee';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+
+                // Draw a pulsing Diamond gem shape
+                const scale = 1 + Math.sin(c.pulse) * 0.15;
+                ctx.translate(c.x, c.y);
+                ctx.scale(scale, scale);
+                
+                ctx.beginPath();
+                ctx.moveTo(0, -c.size);
+                ctx.lineTo(c.size * 0.7, 0);
+                ctx.lineTo(0, c.size);
+                ctx.lineTo(-c.size * 0.7, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Inner core lines
+                ctx.beginPath();
+                ctx.moveTo(0, -c.size);
+                ctx.lineTo(0, c.size);
+                ctx.moveTo(-c.size * 0.7, 0);
+                ctx.lineTo(c.size * 0.7, 0);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.stroke();
+
+                ctx.restore();
+            });
+
+            // 5. Draw Meteors (Obstacles)
+            meteors.forEach(m => {
+                ctx.save();
+                ctx.translate(m.x, m.y);
+                ctx.rotate(m.rotation);
+
+                // Main body of meteor with glowing burning effect
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = 'rgba(239, 68, 68, 0.8)'; // Red glow
+                ctx.fillStyle = '#451a03'; // Deep brown meteor core
+                ctx.strokeStyle = '#f97316'; // Orange crust outline
+                ctx.lineWidth = 2.5;
+
+                // Draw craggy asteroid path
+                ctx.beginPath();
+                const steps = 8;
+                for (let j = 0; j < steps; j++) {
+                    const angle = (j / steps) * Math.PI * 2;
+                    // Slightly offset radius for spiky/craggy aesthetic
+                    const offset = (Math.sin(angle * 4) + Math.cos(angle * 2)) * (m.size * 0.12);
+                    const r = m.size + offset;
+                    const xCoord = Math.cos(angle) * r;
+                    const yCoord = Math.sin(angle) * r;
+                    
+                    if (j === 0) ctx.moveTo(xCoord, yCoord);
+                    else ctx.lineTo(xCoord, yCoord);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Inner crater details
+                ctx.fillStyle = '#270e01';
+                ctx.beginPath();
+                ctx.arc(-m.size * 0.3, -m.size * 0.2, m.size * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(m.size * 0.2, m.size * 0.3, m.size * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            });
+
+            // 6. Draw Particles Explosions
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 7. Draw Spaceship (Rocket Plane) on Nose Point
+            ctx.save();
+            ctx.translate(rocketPos.x, rocketPos.y);
+
+            // Thruster fire tail animation based on time
+            ctx.save();
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#f97316';
+            const flameLen = 20 + Math.random() * 15;
+            const gradient = ctx.createLinearGradient(0, 10, 0, 10 + flameLen);
+            gradient.addColorStop(0, '#f97316'); // Solid orange
+            gradient.addColorStop(0.5, '#ef4444'); // Vivid red
+            gradient.addColorStop(1, 'rgba(239, 68, 68, 0)'); // Transparent tail
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.moveTo(-7, 12);
+            ctx.quadraticCurveTo(0, 12 + flameLen, 0, 15 + flameLen);
+            ctx.quadraticCurveTo(0, 12 + flameLen, 7, 12);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            // Main Spaceship Hull Drawing
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#06b6d4';
+            ctx.fillStyle = '#ffffff'; // Pristine white spacecraft hull
+            ctx.strokeStyle = '#06b6d4';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.moveTo(0, -26); // Nose cone
+            ctx.lineTo(14, 14); // Right wing back
+            ctx.lineTo(0, 6);   // Tail base indentation
+            ctx.lineTo(-14, 14); // Left wing back
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Decorative Wings panels / Cockpit
+            ctx.fillStyle = '#06b6d4'; // Glowing cockpit window
+            ctx.beginPath();
+            ctx.moveTo(0, -12);
+            ctx.lineTo(4, 2);
+            ctx.lineTo(-4, 2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Lateral stabilizers
+            ctx.fillStyle = '#ec4899'; // Hot pink wingtips
+            ctx.beginPath();
+            ctx.moveTo(14, 14);
+            ctx.lineTo(22, 18);
+            ctx.lineTo(11, 7);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(-14, 14);
+            ctx.lineTo(-22, 18);
+            ctx.lineTo(-11, 7);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw glowing personal energy protective bubble shield around spacecraft
+            ctx.strokeStyle = `rgba(34, 211, 238, ${0.15 + (hp / 200)})`; // Opacity scales with health
+            ctx.shadowColor = '#22d3ee';
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 30, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // --- STREAMING_CHUNK: Managing GUI displays & Score counters ---
+        function updateHUD() {
+            // Counter formatters
+            hudScore.innerText = String(score).padStart(5, '0');
+            hudTimer.innerText = elapsedSeconds.toFixed(1) + 's';
+            hudMultiplier.innerText = speedMultiplier.toFixed(1) + 'x';
+            
+            // HP Bar visual scaling and color dynamic updates
+            hudShieldBar.style.width = `${hp}%`;
+            if (hp > 50) {
+                hudShieldBar.className = "bg-gradient-to-r from-emerald-500 to-cyan-500 h-full w-full transition-all duration-300";
+            } else if (hp > 25) {
+                hudShieldBar.className = "bg-gradient-to-r from-yellow-500 to-amber-500 h-full w-full transition-all duration-300";
+            } else {
+                hudShieldBar.className = "bg-gradient-to-r from-red-600 to-pink-500 h-full w-full transition-all duration-300 animate-pulse";
+            }
+        }
+
+        // --- STREAMING_CHUNK: Orchestrating the master Game Loop ticker ---
+        function runGameLoop() {
+            if (!isPlaying) return;
+
+            updateGameEntities();
+            drawCanvas();
+            updateHUD();
+
+            requestAnimationFrame(runGameLoop);
+        }
+
+        // Launch Game Session
+        function startGameSession() {
+            // Hide menu screens
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('screen-game-over').classList.add('hidden');
+            
+            // Reset gameplay states
+            score = 0;
+            hp = 100;
+            baseSpeed = DIFFICULTIES[currentDifficulty].startSpeed;
+            speedMultiplier = 1.0;
+            elapsedSeconds = 0;
+            meteors = [];
+            crystals = [];
+            particles = [];
+            startTime = Date.now();
+            isPlaying = true;
+            
+            playSoundLevelUp();
+            runGameLoop();
+        }
+
+        // Terminate Game / Ship Crashing Sequence
+        function endGameSession() {
+            isPlaying = false;
+            
+            // Present Game Over Display
+            finalScore.innerText = score;
+            finalTime.innerText = elapsedSeconds.toFixed(1) + ' วินาที';
+            document.getElementById('screen-game-over').classList.remove('hidden');
+        }
+
+        // --- STREAMING_CHUNK: Initializing DOM triggers and Click-event triggers ---
+        document.getElementById('btn-start').addEventListener('click', () => {
+            initAudio();
+            playSoundBeep(520, 0.15, 'triangle');
+            
+            // If MediaPipe is not yet initialized, load it first
+            if (!pose) {
+                startMediaPipe();
+            } else {
+                startGameSession();
+            }
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            initAudio();
+            playSoundBeep(580, 0.1, 'sine');
+            startGameSession();
+        });
+
+        // Responsive adjustment on scale for optimal canvas size ratio
+        function handleResize() {
+            const containerWidth = canvasElement.parentElement.clientWidth;
+            // Limit height based on aspect ratio standard (640:480)
+            const calculatedHeight = (containerWidth / 640) * 480;
+            canvasElement.style.width = '100%';
+            canvasElement.style.height = `${calculatedHeight}px`;
+        }
+
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('load', handleResize);
+
+        // Pre-selection of standard difficulty button UI
+        setDifficulty('medium');
+    </script>
+</body>
+</html>
