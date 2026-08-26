@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>เลือกไฟล์ HTML</title>
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    font-family:Arial,"Noto Sans Thai",sans-serif;
+    background:#f5f8fc;
+    color:#172033;
+}
+
+.container{
+    max-width:1100px;
+    margin:auto;
+    padding:60px 25px;
+}
+
+.header{
+    text-align:center;
+    margin-bottom:40px;
+}
+
+.header h1{
+    font-size:40px;
+    margin:0 0 10px;
+}
+
+.header p{
+    color:#64748b;
+}
+
+.folder-btn{
+    border:0;
+    background:#2563eb;
+    color:white;
+    padding:15px 28px;
+    border-radius:14px;
+    font-size:16px;
+    font-weight:bold;
+    cursor:pointer;
+    margin-top:20px;
+}
+
+.folder-btn:hover{
+    background:#1d4ed8;
+}
+
+.info{
+    text-align:center;
+    margin:30px 0;
+    color:#64748b;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+    gap:20px;
+}
+
+.card{
+    background:white;
+    padding:25px;
+    border-radius:20px;
+    border:1px solid #e2e8f0;
+    box-shadow:0 8px 25px rgba(0,0,0,.05);
+    transition:.2s;
+    cursor:pointer;
+}
+
+.card:hover{
+    transform:translateY(-5px);
+    border-color:#93c5fd;
+    box-shadow:0 15px 35px rgba(37,99,235,.12);
+}
+
+.icon{
+    width:50px;
+    height:50px;
+    background:#eff6ff;
+    border-radius:15px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:25px;
+    margin-bottom:18px;
+}
+
+.name{
+    font-size:18px;
+    font-weight:bold;
+    margin-bottom:8px;
+}
+
+.file{
+    font-size:13px;
+    color:#94a3b8;
+}
+
+.open{
+    margin-top:20px;
+    color:#2563eb;
+    font-weight:bold;
+}
+
+.empty{
+    text-align:center;
+    color:#94a3b8;
+    padding:50px;
+    grid-column:1/-1;
+}
+
+@media(max-width:600px){
+    .header h1{
+        font-size:30px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+
+        <h1>📂 เลือกไฟล์ที่ต้องการเปิด</h1>
+
+        <p>
+            ระบบจะค้นหาไฟล์ HTML ในโฟลเดอร์ให้อัตโนมัติ
+        </p>
+
+        <button
+            class="folder-btn"
+            onclick="selectFolder()"
+        >
+            📁 เลือกโฟลเดอร์
+        </button>
+
+    </div>
+
+    <div
+        class="info"
+        id="info"
+    >
+        กรุณาเลือกโฟลเดอร์ที่เก็บไฟล์ HTML
+    </div>
+
+    <div
+        class="grid"
+        id="grid"
+    ></div>
+
+</div>
+
+
+<script>
+
+let folderHandle = null;
+
+
+/* ===========================
+   เลือกโฟลเดอร์
+=========================== */
+
+async function selectFolder(){
+
+    try{
+
+        folderHandle =
+            await window.showDirectoryPicker();
+
+        loadFiles();
+
+    }
+    catch(error){
+
+        console.log(error);
+
+    }
+
+}
+
+
+/* ===========================
+   อ่านไฟล์ทั้งหมดในโฟลเดอร์
+=========================== */
+
+async function loadFiles(){
+
+    const grid =
+        document.getElementById("grid");
+
+    const info =
+        document.getElementById("info");
+
+
+    grid.innerHTML = "";
+
+
+    let htmlFiles = [];
+
+
+    for await (
+        const [name, handle]
+        of folderHandle.entries()
+    ){
+
+        if(
+            handle.kind === "file"
+            &&
+            name.toLowerCase().endsWith(".html")
+            &&
+            name.toLowerCase() !== "index.html"
+        ){
+
+            htmlFiles.push({
+                name:name,
+                handle:handle
+            });
+
+        }
+
+    }
+
+
+    htmlFiles.sort((a,b)=>
+        a.name.localeCompare(
+            b.name,
+            "th"
+        )
+    );
+
+
+    info.innerHTML =
+        `
+        พบไฟล์ HTML
+        <b>${htmlFiles.length}</b>
+        ไฟล์
+        `;
+
+
+    if(htmlFiles.length === 0){
+
+        grid.innerHTML =
+            `
+            <div class="empty">
+                ไม่พบไฟล์ HTML ในโฟลเดอร์นี้
+            </div>
+            `;
+
+        return;
+
+    }
+
+
+    htmlFiles.forEach(item=>{
+
+        createCard(item);
+
+    });
+
+}
+
+
+/* ===========================
+   สร้างการ์ด
+=========================== */
+
+function createCard(item){
+
+    const grid =
+        document.getElementById("grid");
+
+
+    const card =
+        document.createElement("div");
+
+
+    card.className = "card";
+
+
+    /*
+    เอา .html ออกจากชื่อ
+    */
+
+    const displayName =
+        item.name.replace(
+            /\.html$/i,
+            ""
+        );
+
+
+    card.innerHTML = `
+
+        <div class="icon">
+            🌐
+        </div>
+
+        <div class="name">
+            ${displayName}
+        </div>
+
+        <div class="file">
+            ${item.name}
+        </div>
+
+        <div class="open">
+            เปิดไฟล์ →
+        </div>
+
+    `;
+
+
+    card.onclick = () =>
+        openFile(item.handle);
+
+
+    grid.appendChild(card);
+
+}
+
+
+/* ===========================
+   เปิดไฟล์ HTML
+=========================== */
+
+async function openFile(handle){
+
+    const file =
+        await handle.getFile();
+
+
+    const url =
+        URL.createObjectURL(file);
+
+
+    window.open(
+        url,
+        "_blank"
+    );
+
+}
+
+</script>
+
+</body>
+</html>
