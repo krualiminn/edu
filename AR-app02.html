@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR ภารกิจหุ่นยนต์เก็บดาว - เรียนรู้อัลกอริทึม</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        /* STREAMING_CHUNK:Styling the layout & neon effects */
+        body {
+            font-family: 'Mitr', sans-serif;
+            background-color: #0f172a; /* Slate 900 - Dark Web App style */
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Neon Glow Effects */
+        .neon-text { text-shadow: 0 0 10px rgba(56, 189, 248, 0.8), 0 0 20px rgba(56, 189, 248, 0.4); }
+        .neon-border { box-shadow: 0 0 15px rgba(56, 189, 248, 0.5), inset 0 0 10px rgba(56, 189, 248, 0.2); }
+        .neon-border-green { box-shadow: 0 0 15px rgba(34, 197, 94, 0.5), inset 0 0 10px rgba(34, 197, 94, 0.2); }
+        .neon-border-red { box-shadow: 0 0 15px rgba(239, 68, 68, 0.5), inset 0 0 10px rgba(239, 68, 68, 0.2); }
+
+        /* Game Board Grid */
+        #game-grid {
+            display: grid;
+            gap: 4px;
+            background-color: #1e293b;
+            padding: 8px;
+            border-radius: 12px;
+            border: 2px solid #334155;
+        }
+
+        .grid-cell {
+            width: 100%;
+            aspect-ratio: 1;
+            background-color: #0f172a;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .cell-wall { background-color: #475569; background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, #334155 10px, #334155 20px); }
+        .cell-path { background-color: rgba(56, 189, 248, 0.1); }
+        
+        .robot {
+            font-size: 2.5rem;
+            filter: drop-shadow(0 0 8px #38bdf8);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncy move */
+            position: absolute;
+            z-index: 10;
+        }
+
+        .item-star { text-shadow: 0 0 15px #eab308; animation: pulse-star 1.5s infinite; }
+        .item-coin { text-shadow: 0 0 10px #fbbf24; animation: bounce-coin 2s infinite; }
+
+        @keyframes pulse-star {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+        @keyframes bounce-coin {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        /* AR Interaction Button styling */
+        .ar-btn {
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        .ar-btn:active { transform: scale(0.95); }
+        .ar-btn:hover { background-color: rgba(255, 255, 255, 0.1); }
+
+        /* Command Queue */
+        #command-queue {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-height: 60px;
+            padding: 10px;
+            background: #1e293b;
+            border-radius: 8px;
+            border: 1px dashed #475569;
+        }
+        .cmd-block {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #3b82f6;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            animation: popIn 0.3s ease;
+        }
+        .cmd-block.executing {
+            background: #f59e0b;
+            transform: scale(1.1);
+            box-shadow: 0 0 15px #f59e0b;
+        }
+        .cmd-block.loop { background: #8b5cf6; }
+
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* AR Canvas Overlay - Make sure it's on top and doesn't block DOM events */
+        #ar-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Video feed */
+        #video-feed {
+            transform: scaleX(-1); /* Mirror Mode */
+            border-radius: 12px;
+            object-fit: cover;
+        }
+        
+        .screen { display: none; }
+        .screen.active { display: flex; flex-direction: column; }
+    </style>
+</head>
+<body class="w-screen h-screen flex justify-center items-center">
+
+    <!-- STREAMING_CHUNK:Building UI Screens -->
+    
+    <!-- Video element (hidden but used by MediaPipe) -->
+    <video id="input_video" class="hidden" autoplay playsinline></video>
+    
+    <!-- AR Canvas Overlay for Laser and Hover Progress -->
+    <canvas id="ar-overlay"></canvas>
+
+    <!-- 1. Start Screen -->
+    <div id="screen-start" class="screen active w-full h-full max-w-5xl mx-auto flex items-center justify-center p-6 relative z-10">
+        <div class="bg-slate-800 p-10 rounded-3xl neon-border text-center max-w-2xl w-full">
+            <h1 class="text-5xl font-bold text-sky-400 neon-text mb-4">🤖 ภารกิจหุ่นยนต์เก็บดาว ⭐</h1>
+            <p class="text-lg text-slate-300 mb-8">
+                เรียนรู้อัลกอริทึม โดยการชู "นิ้วชี้" เพื่อควบคุมเลเซอร์สีแดง<br>
+                เรียงคำสั่งให้หุ่นยนต์เดินไปเก็บดาวให้สำเร็จ!<br>
+                <span class="text-sm text-yellow-400">*รอสักครู่ให้ AI เปิดกล้อง (กรุณากดยอมรับการใช้กล้อง)</span>
+            </p>
+            
+            <div class="flex justify-center mb-8">
+                <div class="w-48 h-48 rounded-2xl overflow-hidden border-4 border-slate-600 relative">
+                    <canvas id="preview-canvas" class="w-full h-full transform scale-x-[-1]"></canvas>
+                    <div id="camera-loading" class="absolute inset-0 flex items-center justify-center bg-slate-900 bg-opacity-80">
+                        <i class="fas fa-spinner fa-spin text-3xl text-sky-400"></i>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-start" class="ar-btn bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold py-4 px-12 rounded-full text-2xl shadow-lg transition-transform w-full sm:w-auto">
+                <i class="fas fa-play mr-2"></i> เริ่มภารกิจ!
+            </button>
+            <p class="mt-4 text-sm text-slate-400">ชี้เลเซอร์ค้างไว้ที่ปุ่มเพื่อกด</p>
+        </div>
+    </div>
+
+    <!-- 2. Play Screen (Main Dashboard) -->
+    <div id="screen-play" class="screen w-full h-full p-4 md:p-6 lg:p-8 flex-col relative z-10">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-4 bg-slate-800 p-4 rounded-2xl shadow-md border border-slate-700">
+            <div>
+                <h2 class="text-2xl font-bold text-sky-400 flex items-center">
+                    <span id="level-display">ด่านที่ 1</span>
+                    <span id="level-title" class="ml-3 text-lg font-normal text-slate-300">ทางตรงเริ่มต้น</span>
+                </h2>
+                <p id="level-desc" class="text-sm text-slate-400 mt-1">ฝึกสั่งหุ่นยนต์เดินตรงไปเก็บดาว</p>
+            </div>
+            <div class="flex gap-4 items-center">
+                <button id="btn-mute" class="ar-btn p-3 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-200">
+                    <i class="fas fa-volume-up text-xl"></i>
+                </button>
+                <div class="w-32 h-24 rounded-lg overflow-hidden border-2 border-slate-600 relative">
+                     <!-- Small PIP camera -->
+                    <canvas id="pip-canvas" class="w-full h-full object-cover transform scale-x-[-1]"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col md:flex-row gap-6 h-full overflow-hidden">
+            
+            <!-- Left: Game Board Area -->
+            <div class="flex-1 flex flex-col bg-slate-800 rounded-2xl p-4 border border-slate-700 relative justify-center items-center">
+                <!-- Status Overlay (Win/Lose message) -->
+                <div id="game-status" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900 bg-opacity-90 rounded-2xl hidden opacity-0 transition-opacity duration-300">
+                    <h3 id="status-title" class="text-5xl font-bold mb-4"></h3>
+                    <p id="status-desc" class="text-xl mb-8 text-center px-4"></p>
+                    <button id="btn-next-retry" class="ar-btn bg-blue-500 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg">
+                        ทำต่อไป
+                    </button>
+                </div>
+
+                <!-- The Grid Engine -->
+                <div id="game-grid" style="grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: 100%; max-width: 450px; aspect-ratio: 1;">
+                    <!-- Cells generated via JS -->
+                </div>
+            </div>
+
+            <!-- Right: Command Palette -->
+            <div class="w-full md:w-80 flex flex-col gap-4">
+                
+                <!-- Command Queue -->
+                <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 flex-1 flex flex-col">
+                    <h3 class="text-lg font-semibold text-slate-300 mb-2 flex justify-between items-center">
+                        <span><i class="fas fa-list-ol mr-2"></i> ลำดับคำสั่ง</span>
+                        <span id="cmd-count" class="text-sm bg-slate-700 px-2 py-1 rounded">0/10</span>
+                    </h3>
+                    <div id="command-queue" class="flex-1 content-start">
+                        <!-- Blocks generated via JS -->
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 grid grid-cols-3 gap-3">
+                    <div class="col-span-3 text-center text-sm text-slate-400 mb-1">เลือกคำสั่ง</div>
+                    
+                    <!-- D-Pad Buttons -->
+                    <div></div>
+                    <button class="ar-btn cmd-add bg-slate-700 hover:bg-slate-600 rounded-xl p-4 flex flex-col items-center justify-center border-b-4 border-slate-900 active:border-b-0 active:translate-y-1" data-cmd="UP">
+                        <i class="fas fa-arrow-up text-2xl text-sky-400"></i>
+                    </button>
+                    <div></div>
+                    
+                    <button class="ar-btn cmd-add bg-slate-700 hover:bg-slate-600 rounded-xl p-4 flex flex-col items-center justify-center border-b-4 border-slate-900 active:border-b-0 active:translate-y-1" data-cmd="LEFT">
+                        <i class="fas fa-arrow-left text-2xl text-sky-400"></i>
+                    </button>
+                    <button class="ar-btn cmd-add bg-slate-700 hover:bg-slate-600 rounded-xl p-4 flex flex-col items-center justify-center border-b-4 border-slate-900 active:border-b-0 active:translate-y-1" data-cmd="DOWN">
+                        <i class="fas fa-arrow-down text-2xl text-sky-400"></i>
+                    </button>
+                    <button class="ar-btn cmd-add bg-slate-700 hover:bg-slate-600 rounded-xl p-4 flex flex-col items-center justify-center border-b-4 border-slate-900 active:border-b-0 active:translate-y-1" data-cmd="RIGHT">
+                        <i class="fas fa-arrow-right text-2xl text-sky-400"></i>
+                    </button>
+                    
+                    <button class="ar-btn cmd-add bg-purple-600 hover:bg-purple-500 rounded-xl p-4 flex flex-col items-center justify-center border-b-4 border-purple-900 active:border-b-0 active:translate-y-1 col-span-3 mt-2" data-cmd="LOOP">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-redo text-xl text-white"></i>
+                            <span class="font-bold text-white">ทำซ้ำ (คำสั่งล่าสุด x2)</span>
+                        </div>
+                    </button>
+                </div>
+
+                <!-- Actions -->
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="btn-clear" class="ar-btn bg-red-600 hover:bg-red-500 text-white font-bold py-4 rounded-xl border-b-4 border-red-900 active:border-b-0 active:translate-y-1">
+                        <i class="fas fa-trash-alt mr-1"></i> ล้าง
+                    </button>
+                    <button id="btn-run" class="ar-btn bg-green-500 hover:bg-green-400 text-white font-bold py-4 rounded-xl border-b-4 border-green-800 active:border-b-0 active:translate-y-1 neon-border-green">
+                        <i class="fas fa-play mr-1"></i> สั่งรัน!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Game Over Screen -->
+    <div id="screen-gameover" class="screen w-full h-full flex items-center justify-center p-6 relative z-10">
+        <div class="bg-slate-800 p-12 rounded-3xl neon-border-green text-center max-w-2xl w-full">
+            <h1 class="text-6xl font-bold text-green-400 neon-text mb-6">🏆 ภารกิจสำเร็จ!</h1>
+            <p class="text-xl text-slate-300 mb-8">
+                สุดยอดมากโปรแกรมเมอร์จิ๋ว! <br>
+                เธอสามารถใช้ความรู้เรื่องอัลกอริทึมช่วยหุ่นยนต์เก็บดาวได้ครบทั้ง 10 ด่านเลยนะ!
+            </p>
+            <div class="flex justify-center gap-4 text-4xl mb-10">
+                <i class="fas fa-star text-yellow-400 drop-shadow-[0_0_10px_#eab308]"></i>
+                <i class="fas fa-star text-yellow-400 drop-shadow-[0_0_10px_#eab308]"></i>
+                <i class="fas fa-star text-yellow-400 drop-shadow-[0_0_10px_#eab308]"></i>
+            </div>
+            <button id="btn-restart" class="ar-btn bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-bold py-4 px-12 rounded-full text-2xl shadow-lg">
+                <i class="fas fa-redo mr-2"></i> เล่นอีกครั้ง
+            </button>
+        </div>
+    </div>
+
+    <!-- STREAMING_CHUNK:JavaScript - Audio Synthesizer -->
+    <script>
+        // --- Web Audio API Synthesizer ---
+        class SoundFX {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.muted = false;
+            }
+
+            playTone(freq, type, duration, vol = 0.1) {
+                if (this.muted) return;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            hover() { this.playTone(600, 'sine', 0.1, 0.05); }
+            click() { this.playTone(800, 'square', 0.1, 0.1); }
+            addCmd() { this.playTone(400, 'square', 0.1, 0.1); }
+            removeCmd() { this.playTone(200, 'square', 0.1, 0.1); }
+            step() { this.playTone(300, 'triangle', 0.15, 0.1); }
+            coin() { 
+                this.playTone(900, 'sine', 0.1, 0.1);
+                setTimeout(() => this.playTone(1200, 'sine', 0.2, 0.1), 100);
+            }
+            win() {
+                const notes = [440, 554, 659, 880];
+                notes.forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'square', 0.2, 0.1), i * 150);
+                });
+            }
+            crash() { this.playTone(150, 'sawtooth', 0.3, 0.2); }
+            error() { 
+                this.playTone(300, 'sawtooth', 0.15, 0.2);
+                setTimeout(() => this.playTone(250, 'sawtooth', 0.2, 0.2), 150);
+            }
+        }
+        
+        const sfx = new SoundFX();
+
+        // STREAMING_CHUNK:JavaScript - Game Data & Logic
+        
+        // Grid size
+        const COLS = 5;
+        const ROWS = 5;
+        
+        // Element codes: 0: Empty, 1: Wall, S: Star(End), C: Coin, R: Robot Start
+        const levels = [
+            {
+                id: 1, title: "ทางตรงเริ่มต้น", desc: "ฝึกสั่งหุ่นยนต์เดินตรงไปเก็บดาว",
+                maxCmds: 3, map: [
+                    [0,0,0,0,0],
+                    [0,0,0,0,0],
+                    ['R',0,'S',0,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 2, title: "เลี้ยวครั้งแรก", desc: "ฝึกเดินแล้วเลี้ยวขวาให้ถูกจุด",
+                maxCmds: 5, map: [
+                    [0,0,0,0,0],
+                    [0,'R',0,0,0],
+                    [0,0,0,0,0],
+                    [0,'S',0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 3, title: "เลี้ยวซ้ายให้ถูก", desc: "ฝึกแยกซ้าย–ขวา และเรียงคำสั่ง",
+                maxCmds: 6, map: [
+                    [0,0,0,0,0],
+                    [0,0,0,'S',0],
+                    [0,0,0,0,0],
+                    [0,0,'R',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 4, title: "หลบกำแพง", desc: "ฝึกหาทางอ้อม ไม่ให้ชนสิ่งกีดขวาง",
+                maxCmds: 6, map: [
+                    [0,0,0,0,0],
+                    [0,0,'S',0,0],
+                    [0,0,1,0,0],
+                    [0,0,'R',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 5, title: "เก็บเหรียญก่อนถึงดาว", desc: "ฝึกวางแผนไปหลายเป้าหมาย",
+                maxCmds: 8, map: [
+                    [0,0,0,0,0],
+                    [0,'R',0,0,0],
+                    [0,0,0,'C',0],
+                    [0,0,0,'S',0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 6, title: "เลือกเส้นทางที่สั้นกว่า", desc: "ฝึกเปรียบเทียบและเลือกวิธีที่ดีที่สุด",
+                maxCmds: 4, map: [
+                    [0,0,0,0,0],
+                    [0,'R',0,'S',0],
+                    [0,1,1,1,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 7, title: "Debug คำสั่งผิด", desc: "สั่งล้างคำสั่งผิด แล้วเรียงใหม่",
+                maxCmds: 5, initialCmds: ['UP', 'UP', 'LEFT'], // Intentionally wrong
+                map: [
+                    [0,0,0,0,0],
+                    [0,0,'S',0,0],
+                    [0,0,0,0,0],
+                    [0,0,'R',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 8, title: "ใช้คำสั่งทำซ้ำ", desc: "ใช้คำสั่ง 🔁 ทำซ้ำคำสั่งก่อนหน้า 2 ครั้ง",
+                maxCmds: 4, map: [
+                    [0,0,0,0,0],
+                    ['R',0,0,0,'S'],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 9, title: "ระวังอุปสรรค", desc: "เก็บเหรียญให้ครบ ห้ามชนกำแพง",
+                maxCmds: 10, map: [
+                    [0,0,0,0,0],
+                    [0,'R','C',1,'S'],
+                    [0,0,0,1,0],
+                    [0,0,'C',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 10, title: "ภารกิจโปรแกรมเมอร์จิ๋ว", desc: "รวมทุกทักษะ เพื่อไปให้ถึงดาว!",
+                maxCmds: 12, map: [
+                    [0,'S',1,0,'C'],
+                    [0,0,1,0,0],
+                    [1,0,1,1,0],
+                    [0,0,0,0,0],
+                    ['R',0,1,'C',0]
+                ]
+            }
+        ];
+
+        let currentLevelIndex = 0;
+        let commandQueue = [];
+        let robotPos = { x: 0, y: 0 };
+        let startPos = { x: 0, y: 0 };
+        let currentMap = [];
+        let isExecuting = false;
+        let coinsToCollect = 0;
+        let coinsCollected = 0;
+        let robotEl = null;
+
+        const cmdIcons = {
+            'UP': '<i class="fas fa-arrow-up"></i>',
+            'DOWN': '<i class="fas fa-arrow-down"></i>',
+            'LEFT': '<i class="fas fa-arrow-left"></i>',
+            'RIGHT': '<i class="fas fa-arrow-right"></i>',
+            'LOOP': '<i class="fas fa-redo"></i>'
+        };
+
+        // --- Game Logic Functions ---
+
+        function initLevel(index) {
+            currentLevelIndex = index;
+            const level = levels[index];
+            currentMap = JSON.parse(JSON.stringify(level.map)); // Deep copy
+            commandQueue = level.initialCmds ? [...level.initialCmds] : [];
+            coinsToCollect = 0;
+            coinsCollected = 0;
+            isExecuting = false;
+
+            // Update UI Texts
+            document.getElementById('level-display').innerText = `ด่านที่ ${level.id}`;
+            document.getElementById('level-title').innerText = level.title;
+            document.getElementById('level-desc').innerText = level.desc;
+            
+            // Build Grid
+            const gridEl = document.getElementById('game-grid');
+            gridEl.innerHTML = '';
+            
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.id = `cell-${x}-${y}`;
+                    
+                    const val = currentMap[y][x];
+                    if (val === 1) cell.classList.add('cell-wall');
+                    else cell.classList.add('cell-path');
+
+                    if (val === 'R') {
+                        startPos = { x, y };
+                        robotPos = { x, y };
+                    } else if (val === 'S') {
+                        cell.innerHTML = '<i class="fas fa-star text-yellow-400 item-star"></i>';
+                    } else if (val === 'C') {
+                        cell.innerHTML = '<i class="fas fa-coins text-yellow-500 item-coin"></i>';
+                        coinsToCollect++;
+                    }
+                    
+                    gridEl.appendChild(cell);
+                }
+            }
+
+            // Create Robot
+            robotEl = document.createElement('div');
+            robotEl.className = 'robot';
+            robotEl.innerHTML = '🤖';
+            gridEl.appendChild(robotEl);
+            updateRobotVisuals(startPos.x, startPos.y);
+
+            // Hide Status overlay
+            const statusEl = document.getElementById('game-status');
+            statusEl.classList.add('hidden');
+            statusEl.classList.remove('opacity-100');
+            statusEl.classList.add('opacity-0');
+
+            updateQueueUI();
+        }
+
+        function updateRobotVisuals(x, y) {
+            // CSS Grid starts at 1, but we use percentages or transforms. 
+            // Since cells are in a CSS Grid, positioning an absolute element requires knowing cell sizes.
+            // Using percentages based on grid:
+            const percentX = (x / COLS) * 100;
+            const percentY = (y / ROWS) * 100;
+            
+            // Center in cell (cell is 20% width/height of container)
+            robotEl.style.left = `calc(${percentX}% + (100% / ${COLS} / 2) - 1.25rem)`;
+            robotEl.style.top = `calc(${percentY}% + (100% / ${ROWS} / 2) - 1.25rem)`;
+        }
+
+        function updateQueueUI() {
+            const level = levels[currentLevelIndex];
+            const qEl = document.getElementById('command-queue');
+            qEl.innerHTML = '';
+            
+            commandQueue.forEach((cmd, i) => {
+                const b = document.createElement('div');
+                b.className = `cmd-block ${cmd === 'LOOP' ? 'loop' : ''}`;
+                b.innerHTML = cmdIcons[cmd];
+                b.id = `cmd-block-${i}`;
+                qEl.appendChild(b);
+            });
+
+            document.getElementById('cmd-count').innerText = `${commandQueue.length}/${level.maxCmds}`;
+            
+            // Visual feedback if max reached
+            if (commandQueue.length >= level.maxCmds) {
+                document.getElementById('cmd-count').classList.add('text-red-400');
+            } else {
+                document.getElementById('cmd-count').classList.remove('text-red-400');
+            }
+        }
+
+        function addCommand(cmd) {
+            if (isExecuting) return;
+            const level = levels[currentLevelIndex];
+            if (commandQueue.length < level.maxCmds) {
+                commandQueue.push(cmd);
+                sfx.addCmd();
+                updateQueueUI();
+            } else {
+                sfx.error(); // Can't add more
+            }
+        }
+
+        function clearCommands() {
+            if (isExecuting) return;
+            commandQueue = [];
+            sfx.removeCmd();
+            resetRobot();
+            updateQueueUI();
+        }
+
+        function resetRobot() {
+            robotPos = { ...startPos };
+            updateRobotVisuals(robotPos.x, robotPos.y);
+            // Restore map items (coins/stars)
+            const level = levels[currentLevelIndex];
+            currentMap = JSON.parse(JSON.stringify(level.map));
+            coinsCollected = 0;
+            
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = document.getElementById(`cell-${x}-${y}`);
+                    const val = currentMap[y][x];
+                    if (val === 'S') {
+                        cell.innerHTML = '<i class="fas fa-star text-yellow-400 item-star"></i>';
+                    } else if (val === 'C') {
+                        cell.innerHTML = '<i class="fas fa-coins text-yellow-500 item-coin"></i>';
+                    } else if (val === 0 || val === 'R') {
+                        cell.innerHTML = '';
+                    }
+                }
+            }
+        }
+
+        function showStatus(title, desc, isWin) {
+            const el = document.getElementById('game-status');
+            const titleEl = document.getElementById('status-title');
+            
+            el.classList.remove('hidden');
+            // small delay for css transition
+            setTimeout(() => {
+                el.classList.remove('opacity-0');
+                el.classList.add('opacity-100');
+            }, 50);
+
+            titleEl.innerText = title;
+            titleEl.className = `text-5xl font-bold mb-4 ${isWin ? 'text-green-400 neon-text' : 'text-red-500 neon-text'}`;
+            document.getElementById('status-desc').innerText = desc;
+            
+            const btn = document.getElementById('btn-next-retry');
+            btn.innerText = isWin ? 'ไปด่านต่อไป' : 'ลองใหม่';
+            btn.className = `ar-btn font-bold py-3 px-8 rounded-full text-xl shadow-lg text-white mt-4 ${isWin ? 'bg-green-500 hover:bg-green-400' : 'bg-red-500 hover:bg-red-400'}`;
+            
+            btn.onclick = () => {
+                sfx.click();
+                if (isWin) {
+                    if (currentLevelIndex < levels.length - 1) {
+                        initLevel(currentLevelIndex + 1);
+                    } else {
+                        switchScreen('screen-gameover');
+                        sfx.win();
+                    }
+                } else {
+                    resetRobot();
+                    el.classList.add('hidden');
+                    el.classList.remove('opacity-100');
+                    el.classList.add('opacity-0');
+                }
+            };
+        }
+
+        // STREAMING_CHUNK:JavaScript - Execution Engine
+        async function runCommands() {
+            if (isExecuting || commandQueue.length === 0) return;
+            isExecuting = true;
+            sfx.click();
+            resetRobot(); // Start fresh from starting point
+
+            // Expand loops for execution logic
+            let executionSequence = [];
+            for (let i = 0; i < commandQueue.length; i++) {
+                const cmd = commandQueue[i];
+                if (cmd === 'LOOP') {
+                    // Repeat previous command 2 times (so total 3 steps)
+                    const prevCmd = executionSequence.length > 0 ? executionSequence[executionSequence.length - 1].action : null;
+                    if (prevCmd && prevCmd !== 'LOOP') {
+                        executionSequence.push({ action: prevCmd, uiIndex: i });
+                        executionSequence.push({ action: prevCmd, uiIndex: i });
+                    }
+                } else {
+                    executionSequence.push({ action: cmd, uiIndex: i });
+                }
+            }
+
+            for (let step of executionSequence) {
+                // Highlight UI block
+                document.querySelectorAll('.cmd-block').forEach(el => el.classList.remove('executing'));
+                const blockEl = document.getElementById(`cmd-block-${step.uiIndex}`);
+                if (blockEl) blockEl.classList.add('executing');
+
+                await new Promise(resolve => setTimeout(resolve, 500)); // Pause between steps
+
+                let nx = robotPos.x;
+                let ny = robotPos.y;
+
+                if (step.action === 'UP') ny -= 1;
+                else if (step.action === 'DOWN') ny += 1;
+                else if (step.action === 'LEFT') nx -= 1;
+                else if (step.action === 'RIGHT') nx += 1;
+
+                // Bounds check
+                if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
+                    sfx.crash();
+                    isExecuting = false;
+                    showStatus('💥 ออกนอกกระดาน!', 'หุ่นยนต์หลุดขอบกระดาน ลองเรียงคำสั่งใหม่นะ', false);
+                    return;
+                }
+
+                // Wall check
+                if (currentMap[ny][nx] === 1) {
+                    sfx.crash();
+                    isExecuting = false;
+                    showStatus('💥 ชนกำแพง!', 'หุ่นยนต์ชนสิ่งกีดขวาง ลองหาทางอ้อมดู', false);
+                    return;
+                }
+
+                // Move visual
+                robotPos = { x: nx, y: ny };
+                updateRobotVisuals(nx, ny);
+                sfx.step();
+
+                // Item check
+                const cellVal = currentMap[ny][nx];
+                if (cellVal === 'C') {
+                    sfx.coin();
+                    coinsCollected++;
+                    currentMap[ny][nx] = 0; // Remove from map
+                    document.getElementById(`cell-${nx}-${ny}`).innerHTML = '';
+                } else if (cellVal === 'S') {
+                    // Reached Star
+                    if (coinsCollected >= coinsToCollect) {
+                        sfx.win();
+                        isExecuting = false;
+                        showStatus('🌟 สำเร็จ!', 'หุ่นยนต์เก็บดาวได้แล้ว เก่งมากๆ', true);
+                        return;
+                    } else {
+                        sfx.error();
+                        isExecuting = false;
+                        showStatus('❌ ลืมเหรียญ!', 'ต้องเก็บเหรียญให้ครบก่อนเก็บดาวนะ', false);
+                        return;
+                    }
+                }
+            }
+
+            // Finished all commands but didn't reach star
+            document.querySelectorAll('.cmd-block').forEach(el => el.classList.remove('executing'));
+            isExecuting = false;
+            sfx.error();
+            showStatus('🛑 คำสั่งหมดแล้ว', 'หุ่นยนต์หยุดเดินแล้ว แต่ยังไม่ถึงเป้าหมายเลย ลองใหม่นะ', false);
+        }
+
+        // Event Listeners for UI Buttons
+        document.querySelectorAll('.cmd-add').forEach(btn => {
+            btn.addEventListener('click', (e) => addCommand(e.currentTarget.dataset.cmd));
+        });
+        document.getElementById('btn-clear').addEventListener('click', clearCommands);
+        document.getElementById('btn-run').addEventListener('click', runCommands);
+        
+        document.getElementById('btn-mute').addEventListener('click', (e) => {
+            sfx.muted = !sfx.muted;
+            const icon = e.currentTarget.querySelector('i');
+            if(sfx.muted) {
+                icon.className = 'fas fa-volume-mute text-xl text-red-400';
+            } else {
+                icon.className = 'fas fa-volume-up text-xl';
+                sfx.hover(); // test sound
+            }
+        });
+
+        function switchScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        document.getElementById('btn-start').addEventListener('click', () => {
+            sfx.click();
+            switchScreen('screen-play');
+            initLevel(0);
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            sfx.click();
+            switchScreen('screen-play');
+            initLevel(0);
+        });
+
+
+        // STREAMING_CHUNK:MediaPipe AR Setup & Hover Logic
+        
+        const videoElement = document.getElementById('input_video');
+        const arOverlay = document.getElementById('ar-overlay');
+        const overlayCtx = arOverlay.getContext('2d');
+        const pipCanvas = document.getElementById('pip-canvas');
+        const pipCtx = pipCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        // Resize overlay to match window
+        function resizeCanvas() {
+            arOverlay.width = window.innerWidth;
+            arOverlay.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Hover interaction state
+        let hoverTarget = null;
+        let hoverStartTime = 0;
+        const HOVER_DURATION = 1200; // 1.2 seconds to click
+
+        function onResults(results) {
+            // Draw camera feed to PIP and Preview
+            if (document.getElementById('screen-start').classList.contains('active')) {
+                previewCanvas.width = videoElement.videoWidth;
+                previewCanvas.height = videoElement.videoHeight;
+                previewCtx.drawImage(results.image, 0, 0, previewCanvas.width, previewCanvas.height);
+                // Hide loading spinner
+                document.getElementById('camera-loading').style.display = 'none';
+            } else {
+                pipCanvas.width = videoElement.videoWidth;
+                pipCanvas.height = videoElement.videoHeight;
+                pipCtx.drawImage(results.image, 0, 0, pipCanvas.width, pipCanvas.height);
+            }
+
+            // Clear Overlay
+            overlayCtx.clearRect(0, 0, arOverlay.width, arOverlay.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0]; // Take first hand
+                
+                // Draw Neon Skeleton on Overlay
+                overlayCtx.save();
+                // Mirror logic for drawing: Since video is mirrored, we flip X when mapping to screen.
+                // Actually, if we map (1 - x) it matches the physical mirror.
+                
+                // Draw connections (skeleton)
+                overlayCtx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+                overlayCtx.lineWidth = 3;
+                overlayCtx.shadowBlur = 10;
+                overlayCtx.shadowColor = '#38bdf8';
+                
+                const connect = (p1, p2) => {
+                    const x1 = (1 - landmarks[p1].x) * arOverlay.width;
+                    const y1 = landmarks[p1].y * arOverlay.height;
+                    const x2 = (1 - landmarks[p2].x) * arOverlay.width;
+                    const y2 = landmarks[p2].y * arOverlay.height;
+                    overlayCtx.beginPath();
+                    overlayCtx.moveTo(x1, y1);
+                    overlayCtx.lineTo(x2, y2);
+                    overlayCtx.stroke();
+                };
+
+                // Draw basic hand lines
+                [0,1,2,3].forEach(i => connect(i, i+1)); // Thumb
+                [0,5,9,13,17,0].forEach((p, i, arr) => i < 5 && connect(p, arr[i+1])); // Palm
+                [5,6,7].forEach(i => connect(i, i+1)); // Index
+                [9,10,11].forEach(i => connect(i, i+1)); // Middle
+                [13,14,15].forEach(i => connect(i, i+1)); // Ring
+                [17,18,19].forEach(i => connect(i, i+1)); // Pinky
+
+                // Extract Index Finger Tip (Landmark 8) for Laser Pointer
+                const indexTip = landmarks[8];
+                const screenX = (1 - indexTip.x) * arOverlay.width;
+                const screenY = indexTip.y * arOverlay.height;
+
+                // Draw Red Laser Dot
+                overlayCtx.beginPath();
+                overlayCtx.arc(screenX, screenY, 8, 0, 2 * Math.PI);
+                overlayCtx.fillStyle = '#ef4444';
+                overlayCtx.fill();
+                overlayCtx.shadowColor = '#ef4444';
+                overlayCtx.shadowBlur = 20;
+                overlayCtx.beginPath();
+                overlayCtx.arc(screenX, screenY, 4, 0, 2 * Math.PI);
+                overlayCtx.fillStyle = '#ffffff';
+                overlayCtx.fill();
+
+                // Interactive Hover Logic
+                const elementUnderPointer = document.elementFromPoint(screenX, screenY);
+                const interactable = elementUnderPointer ? elementUnderPointer.closest('.ar-btn') : null;
+
+                if (interactable && !interactable.disabled && !isExecuting) {
+                    if (hoverTarget !== interactable) {
+                        hoverTarget = interactable;
+                        hoverStartTime = Date.now();
+                        sfx.hover();
+                        interactable.style.transform = 'scale(0.95)'; // Visual feedback
+                    } else {
+                        const elapsed = Date.now() - hoverStartTime;
+                        const progress = Math.min(elapsed / HOVER_DURATION, 1);
+
+                        // Draw Loading Circle
+                        overlayCtx.beginPath();
+                        overlayCtx.arc(screenX, screenY, 25, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progress));
+                        overlayCtx.strokeStyle = '#22c55e'; // Green progress
+                        overlayCtx.lineWidth = 5;
+                        overlayCtx.stroke();
+                        
+                        // Particle/Glow effect as it loads
+                        overlayCtx.shadowColor = '#22c55e';
+                        overlayCtx.shadowBlur = 15 * progress;
+
+                        if (progress >= 1) {
+                            // Trigger Click!
+                            interactable.click();
+                            hoverTarget = null; // Reset
+                            
+                            // Visual Pop on Canvas
+                            overlayCtx.beginPath();
+                            overlayCtx.arc(screenX, screenY, 40, 0, Math.PI * 2);
+                            overlayCtx.fillStyle = 'rgba(34, 197, 94, 0.5)';
+                            overlayCtx.fill();
+                            
+                            // reset transform
+                            interactable.style.transform = '';
+                        }
+                    }
+                } else {
+                    if (hoverTarget) {
+                        hoverTarget.style.transform = ''; // reset previous target
+                        hoverTarget = null;
+                    }
+                }
+                overlayCtx.restore();
+            } else {
+                if (hoverTarget) {
+                    hoverTarget.style.transform = '';
+                    hoverTarget = null;
+                }
+            }
+        }
+
+        // Initialize MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+        hands.onResults(onResults);
+
+        // Start Camera
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+
+    </script>
+</body>
+</html>
