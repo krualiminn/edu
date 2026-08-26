@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ภารกิจหุ่นยนต์เก็บดาว - เรียนรู้อัลกอริทึม</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        /* STREAMING_CHUNK:Styling the layout and colorful UI components */
+        body {
+            font-family: 'Mitr', sans-serif;
+            background-color: #f0f9ff; /* Sky 50 - Light, clean background */
+            color: #1e293b;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        /* Fun, chunky buttons */
+        .btn-chunky {
+            transition: all 0.15s ease;
+            position: relative;
+            transform: translateY(0);
+        }
+        .btn-chunky:active, .btn-chunky.simulated-active {
+            transform: translateY(4px);
+            border-bottom-width: 0px !important;
+            margin-top: 4px;
+        }
+
+        /* Game Board Grid */
+        #game-grid {
+            display: grid;
+            gap: 6px;
+            background-color: #e2e8f0;
+            padding: 10px;
+            border-radius: 16px;
+            box-shadow: inset 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .grid-cell {
+            width: 100%;
+            aspect-ratio: 1;
+            background-color: #ffffff;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5rem;
+            position: relative;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .cell-wall { 
+            background-color: #cbd5e1; 
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, #94a3b8 10px, #94a3b8 20px); 
+            box-shadow: none;
+        }
+        .cell-path { background-color: #ffffff; }
+        
+        .robot {
+            font-size: 3rem;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: absolute;
+            z-index: 10;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+        }
+
+        .item-star { color: #f59e0b; animation: pulse-star 1.5s infinite; filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.4)); }
+        .item-coin { color: #fbbf24; animation: bounce-coin 2s infinite; filter: drop-shadow(0 2px 4px rgba(251, 191, 36, 0.4)); }
+
+        @keyframes pulse-star {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+        @keyframes bounce-coin {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        /* Scratch-like Command Blocks */
+        #command-queue {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            min-height: 70px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 2px dashed #cbd5e1;
+        }
+        .cmd-block {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #3b82f6; /* Blue */
+            color: white;
+            border-radius: 10px;
+            font-size: 1.5rem;
+            border-bottom: 4px solid #1d4ed8;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .cmd-block.executing {
+            background: #f59e0b; /* Amber */
+            border-bottom-color: #b45309;
+            transform: scale(1.1);
+        }
+        .cmd-block.loop { 
+            background: #a855f7; /* Purple */
+            border-bottom-color: #7e22ce;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* AR Overlays */
+        #global-laser-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Camera Widget */
+        .camera-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4/3;
+            border-radius: 16px;
+            overflow: hidden;
+            background-color: #1e293b;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 4px solid #fff;
+        }
+        #camera-canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror mode */
+        }
+        
+        .screen { display: none; }
+        .screen.active { display: block; animation: fadeIn 0.4s ease; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+    <!-- STREAMING_CHUNK:Building UI Screens - Navigation and Canvas Setup -->
+    
+    <!-- Video element (hidden) -->
+    <video id="input_video" class="hidden" autoplay playsinline></video>
+    
+    <!-- Global AR Laser Overlay (pointer-events: none) -->
+    <canvas id="global-laser-overlay"></canvas>
+
+    <!-- Top Navbar -->
+    <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 z-20 relative">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-500 text-white w-10 h-10 rounded-lg flex items-center justify-center text-2xl shadow-inner">
+                🤖
+            </div>
+            <h1 class="text-xl font-bold text-slate-800 tracking-wide">ภารกิจหุ่นยนต์เก็บดาว</h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <div id="level-badge" class="hidden bg-sky-100 text-sky-700 px-4 py-1.5 rounded-full font-semibold text-sm border border-sky-200">
+                ด่าน 1/10
+            </div>
+            <button id="btn-mute" class="ar-target w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors">
+                <i class="fas fa-volume-up text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-hidden relative">
+        
+        <!-- 1. Start Screen -->
+        <div id="screen-start" class="screen active w-full h-full p-6 flex flex-col items-center justify-center overflow-y-auto">
+            <div class="bg-white rounded-[2rem] shadow-xl p-8 md:p-12 max-w-4xl w-full text-center border-4 border-white outline outline-4 outline-sky-100">
+                <h2 class="text-4xl md:text-5xl font-extrabold text-blue-600 mb-6 drop-shadow-sm">เริ่มภารกิจโปรแกรมเมอร์จิ๋ว!</h2>
+                <p class="text-lg text-slate-600 mb-8 max-w-2xl mx-auto leading-relaxed">
+                    ใช้ <b class="text-red-500">"นิ้วชี้"</b> ของเธอเป็นเลเซอร์ควบคุมหน้าจอ<br>
+                    วางแผนและเรียงลำดับคำสั่ง เพื่อพาหุ่นยนต์เดินไปเก็บดาวให้สำเร็จ
+                </p>
+                
+                <!-- Camera Preview for setup -->
+                <div class="flex flex-col items-center justify-center mb-8">
+                    <div class="camera-container w-64 md:w-80 border-sky-300">
+                        <canvas id="preview-camera-canvas" class="w-full h-full transform scale-x-[-1]"></canvas>
+                        <div id="camera-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-800 text-white">
+                            <i class="fas fa-circle-notch fa-spin text-4xl text-sky-400 mb-3"></i>
+                            <span>กำลังเปิดกล้อง...</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-sky-600 mt-3 bg-sky-50 px-4 py-2 rounded-full"><i class="fas fa-info-circle mr-1"></i> ยืนห่างจากกล้องประมาณ 1 เมตร ให้เห็นมือชัดเจน</p>
+                </div>
+
+                <button id="btn-start" class="ar-target btn-chunky bg-green-500 text-white font-bold py-4 px-12 rounded-2xl text-2xl border-b-[6px] border-green-700 hover:bg-green-400 mx-auto block w-full md:w-auto">
+                    <i class="fas fa-play mr-2"></i> เข้าสู่บทเรียน
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Play Screen (Main Dashboard) -->
+        <div id="screen-play" class="screen w-full h-full p-4 md:p-6 overflow-y-auto">
+            <div class="max-w-7xl mx-auto h-full flex flex-col lg:flex-row gap-6">
+                
+                <!-- Left Column: Game Board & Commands -->
+                <div class="flex-1 flex flex-col gap-6">
+                    
+                    <!-- Level Info -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">
+                                <span id="level-display" class="text-blue-600">ด่านที่ 1</span> : <span id="level-title">ทางตรงเริ่มต้น</span>
+                            </h2>
+                            <p id="level-desc" class="text-slate-500 mt-1">ฝึกสั่งหุ่นยนต์เดินตรงไปเก็บดาว</p>
+                        </div>
+                    </div>
+
+                    <!-- Game Area Container -->
+                    <div class="flex-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-8 items-center justify-center relative">
+                        
+                        <!-- Status Modal overlay (Win/Lose) -->
+                        <div id="game-status" class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm rounded-2xl hidden opacity-0 transition-opacity duration-300">
+                            <div class="bg-white p-8 rounded-3xl shadow-2xl text-center border-4 border-slate-100 max-w-sm w-full transform scale-95 transition-transform duration-300" id="status-card">
+                                <div id="status-icon" class="text-7xl mb-4"></div>
+                                <h3 id="status-title" class="text-3xl font-bold mb-2 text-slate-800"></h3>
+                                <p id="status-desc" class="text-slate-600 mb-6"></p>
+                                <button id="btn-next-retry" class="ar-target btn-chunky bg-blue-500 text-white font-bold py-3 px-8 rounded-xl text-xl border-b-4 border-blue-700 hover:bg-blue-400 w-full">
+                                    ทำต่อไป
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- The Grid Engine -->
+                        <div class="w-full max-w-[400px]">
+                            <div id="game-grid" style="grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: 100%; aspect-ratio: 1;">
+                                <!-- Cells generated via JS -->
+                            </div>
+                        </div>
+
+                        <!-- Command Queue List -->
+                        <div class="w-full md:w-64 bg-slate-50 p-4 rounded-xl border border-slate-200 h-full flex flex-col">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="font-bold text-slate-700">ลำดับคำสั่ง</h3>
+                                <span id="cmd-count" class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">0/10</span>
+                            </div>
+                            <div id="command-queue" class="flex-1 content-start shadow-inner">
+                                <!-- Blocks generated via JS -->
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="grid grid-cols-2 gap-3 mt-4">
+                                <button id="btn-clear" class="ar-target btn-chunky bg-red-500 text-white font-bold py-3 rounded-xl border-b-4 border-red-700 hover:bg-red-400">
+                                    <i class="fas fa-trash-alt"></i> ล้าง
+                                </button>
+                                <button id="btn-run" class="ar-target btn-chunky bg-green-500 text-white font-bold py-3 rounded-xl border-b-4 border-green-700 hover:bg-green-400">
+                                    <i class="fas fa-play"></i> รัน
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Camera Widget & Control Palette -->
+                <div class="w-full lg:w-80 flex flex-col gap-6">
+                    
+                    <!-- Camera Widget -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-slate-700"><i class="fas fa-video text-blue-500 mr-2"></i>เซนเซอร์ตรวจจับ</h3>
+                            <span class="flex h-3 w-3 relative">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                            </span>
+                        </div>
+                        <div class="camera-container">
+                            <canvas id="play-camera-canvas" class="w-full h-full transform scale-x-[-1]"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Command Palette -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-1">
+                        <h3 class="font-bold text-slate-700 mb-4 text-center">เลือกคำสั่ง</h3>
+                        
+                        <!-- D-Pad Buttons -->
+                        <div class="grid grid-cols-3 gap-3 justify-items-center">
+                            <div></div>
+                            <button class="ar-target cmd-add btn-chunky w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl border-b-4 border-blue-300 hover:bg-blue-200 flex items-center justify-center text-2xl" data-cmd="UP">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <div></div>
+                            
+                            <button class="ar-target cmd-add btn-chunky w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl border-b-4 border-blue-300 hover:bg-blue-200 flex items-center justify-center text-2xl" data-cmd="LEFT">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <button class="ar-target cmd-add btn-chunky w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl border-b-4 border-blue-300 hover:bg-blue-200 flex items-center justify-center text-2xl" data-cmd="DOWN">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                            <button class="ar-target cmd-add btn-chunky w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl border-b-4 border-blue-300 hover:bg-blue-200 flex items-center justify-center text-2xl" data-cmd="RIGHT">
+                                <i class="fas fa-arrow-right"></i>
+                            </button>
+                            
+                            <button class="ar-target cmd-add btn-chunky bg-purple-100 text-purple-600 w-full py-4 rounded-2xl border-b-4 border-purple-300 hover:bg-purple-200 flex items-center justify-center gap-2 col-span-3 mt-2 font-bold" data-cmd="LOOP">
+                                <i class="fas fa-redo"></i> ทำซ้ำ (x2)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Game Over Screen -->
+        <div id="screen-gameover" class="screen w-full h-full p-6 flex flex-col items-center justify-center overflow-y-auto">
+            <div class="bg-white p-12 rounded-[2rem] shadow-2xl text-center max-w-2xl w-full border-4 border-green-100">
+                <div class="text-8xl mb-6">🎉</div>
+                <h1 class="text-5xl font-extrabold text-green-500 mb-4">เก่งมาก! ภารกิจสำเร็จ</h1>
+                <p class="text-xl text-slate-600 mb-8">
+                    หนูผ่านทั้ง 10 ด่าน และเรียนรู้การสั่งงานแบบอัลกอริทึมได้ยอดเยี่ยมมาก!
+                </p>
+                <div class="flex justify-center gap-4 text-5xl mb-10">
+                    <i class="fas fa-star text-yellow-400 drop-shadow-md"></i>
+                    <i class="fas fa-star text-yellow-400 drop-shadow-md scale-125 -translate-y-2"></i>
+                    <i class="fas fa-star text-yellow-400 drop-shadow-md"></i>
+                </div>
+                <button id="btn-restart" class="ar-target btn-chunky bg-blue-500 text-white font-bold py-4 px-12 rounded-2xl text-2xl border-b-[6px] border-blue-700 hover:bg-blue-400 mx-auto block">
+                    <i class="fas fa-redo mr-2"></i> เล่นอีกครั้ง
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- STREAMING_CHUNK:JavaScript - Audio Synthesizer -->
+    <script>
+        // --- Web Audio API Synthesizer (Retro Web App Sounds) ---
+        class SoundFX {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.muted = false;
+            }
+
+            playTone(freq, type, duration, vol = 0.1) {
+                if (this.muted) return;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            hover() { this.playTone(600, 'sine', 0.1, 0.05); }
+            click() { this.playTone(900, 'sine', 0.1, 0.1); }
+            addCmd() { this.playTone(500, 'square', 0.1, 0.05); }
+            removeCmd() { this.playTone(300, 'square', 0.1, 0.05); }
+            step() { this.playTone(400, 'triangle', 0.15, 0.08); }
+            coin() { 
+                this.playTone(987.77, 'sine', 0.1, 0.1); // B5
+                setTimeout(() => this.playTone(1318.51, 'sine', 0.2, 0.1), 100); // E6
+            }
+            winLevel() {
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C E G C
+                notes.forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'square', 0.15, 0.1), i * 120);
+                });
+            }
+            winGame() {
+                const notes = [523.25, 523.25, 523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'square', 0.2, 0.1), i * 150);
+                });
+            }
+            crash() { this.playTone(150, 'sawtooth', 0.3, 0.1); }
+            error() { 
+                this.playTone(300, 'sawtooth', 0.15, 0.1);
+                setTimeout(() => this.playTone(250, 'sawtooth', 0.2, 0.1), 150);
+            }
+        }
+        
+        const sfx = new SoundFX();
+
+        // STREAMING_CHUNK:JavaScript - Game Data & Logic
+        
+        // Grid size
+        const COLS = 5;
+        const ROWS = 5;
+        
+        // Element codes: 0: Empty, 1: Wall, S: Star(End), C: Coin, R: Robot Start
+        const levels = [
+            {
+                id: 1, title: "ทางตรงเริ่มต้น", desc: "ฝึกสั่งหุ่นยนต์เดินตรงไปเก็บดาว",
+                maxCmds: 3, map: [
+                    [0,0,0,0,0],
+                    [0,0,0,0,0],
+                    ['R',0,'S',0,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 2, title: "เลี้ยวครั้งแรก", desc: "ฝึกเดินแล้วเลี้ยวขวาให้ถูกจุด",
+                maxCmds: 5, map: [
+                    [0,0,0,0,0],
+                    [0,'R',0,0,0],
+                    [0,0,0,0,0],
+                    [0,'S',0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 3, title: "เลี้ยวซ้ายให้ถูก", desc: "ฝึกแยกซ้าย–ขวา และเรียงคำสั่ง",
+                maxCmds: 6, map: [
+                    [0,0,0,0,0],
+                    [0,0,0,'S',0],
+                    [0,0,0,0,0],
+                    [0,0,'R',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 4, title: "หลบกำแพง", desc: "ฝึกหาทางอ้อม ไม่ให้ชนสิ่งกีดขวาง",
+                maxCmds: 6, map: [
+                    [0,0,0,0,0],
+                    [0,0,'S',0,0],
+                    [0,0,1,0,0],
+                    [0,0,'R',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 5, title: "เก็บเหรียญก่อนถึงดาว", desc: "ฝึกวางแผนไปหลายเป้าหมาย",
+                maxCmds: 8, map: [
+                    [0,0,0,0,0],
+                    [0,'R',0,0,0],
+                    [0,0,0,'C',0],
+                    [0,0,0,'S',0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 6, title: "เลือกเส้นทางที่สั้นกว่า", desc: "ฝึกเปรียบเทียบและเลือกวิธีที่ดีที่สุด",
+                maxCmds: 4, map: [
+                    [0,0,0,0,0],
+                    [0,'R',0,'S',0],
+                    [0,1,1,1,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 7, title: "Debug คำสั่งผิด", desc: "สั่งล้างคำสั่งที่ผิด แล้วเรียงใหม่ให้ถูก",
+                maxCmds: 5, initialCmds: ['UP', 'UP', 'LEFT'], // Intentionally wrong
+                map: [
+                    [0,0,0,0,0],
+                    [0,0,'S',0,0],
+                    [0,0,0,0,0],
+                    [0,0,'R',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 8, title: "ใช้คำสั่งทำซ้ำ", desc: "ใช้คำสั่ง 🔁 ทำซ้ำคำสั่งก่อนหน้า 2 ครั้ง",
+                maxCmds: 4, map: [
+                    [0,0,0,0,0],
+                    ['R',0,0,0,'S'],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 9, title: "ระวังอุปสรรค", desc: "เก็บเหรียญให้ครบ ห้ามชนกำแพง",
+                maxCmds: 10, map: [
+                    [0,0,0,0,0],
+                    [0,'R','C',1,'S'],
+                    [0,0,0,1,0],
+                    [0,0,'C',0,0],
+                    [0,0,0,0,0]
+                ]
+            },
+            {
+                id: 10, title: "ภารกิจโปรแกรมเมอร์จิ๋ว", desc: "รวมทุกทักษะ เพื่อไปให้ถึงดาว!",
+                maxCmds: 12, map: [
+                    [0,'S',1,0,'C'],
+                    [0,0,1,0,0],
+                    [1,0,1,1,0],
+                    [0,0,0,0,0],
+                    ['R',0,1,'C',0]
+                ]
+            }
+        ];
+
+        let currentLevelIndex = 0;
+        let commandQueue = [];
+        let robotPos = { x: 0, y: 0 };
+        let startPos = { x: 0, y: 0 };
+        let currentMap = [];
+        let isExecuting = false;
+        let coinsToCollect = 0;
+        let coinsCollected = 0;
+        let robotEl = null;
+
+        const cmdIcons = {
+            'UP': '<i class="fas fa-arrow-up"></i>',
+            'DOWN': '<i class="fas fa-arrow-down"></i>',
+            'LEFT': '<i class="fas fa-arrow-left"></i>',
+            'RIGHT': '<i class="fas fa-arrow-right"></i>',
+            'LOOP': '<i class="fas fa-redo"></i>'
+        };
+
+        // --- Game Logic Functions ---
+
+        function initLevel(index) {
+            currentLevelIndex = index;
+            const level = levels[index];
+            currentMap = JSON.parse(JSON.stringify(level.map)); 
+            commandQueue = level.initialCmds ? [...level.initialCmds] : [];
+            coinsToCollect = 0;
+            coinsCollected = 0;
+            isExecuting = false;
+
+            // Update UI Texts
+            document.getElementById('level-display').innerText = `ด่านที่ ${level.id}`;
+            document.getElementById('level-title').innerText = level.title;
+            document.getElementById('level-desc').innerText = level.desc;
+            
+            const badge = document.getElementById('level-badge');
+            badge.innerText = `ด่าน ${level.id}/10`;
+            badge.classList.remove('hidden');
+            
+            // Build Grid
+            const gridEl = document.getElementById('game-grid');
+            gridEl.innerHTML = '';
+            
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.id = `cell-${x}-${y}`;
+                    
+                    const val = currentMap[y][x];
+                    if (val === 1) cell.classList.add('cell-wall');
+                    else cell.classList.add('cell-path');
+
+                    if (val === 'R') {
+                        startPos = { x, y };
+                        robotPos = { x, y };
+                    } else if (val === 'S') {
+                        cell.innerHTML = '<i class="fas fa-star item-star"></i>';
+                    } else if (val === 'C') {
+                        cell.innerHTML = '<i class="fas fa-coins item-coin"></i>';
+                        coinsToCollect++;
+                    }
+                    
+                    gridEl.appendChild(cell);
+                }
+            }
+
+            // Create Robot
+            robotEl = document.createElement('div');
+            robotEl.className = 'robot';
+            robotEl.innerHTML = '🤖';
+            gridEl.appendChild(robotEl);
+            updateRobotVisuals(startPos.x, startPos.y);
+
+            // Hide Status overlay
+            const statusEl = document.getElementById('game-status');
+            const statusCard = document.getElementById('status-card');
+            statusEl.classList.add('hidden');
+            statusEl.classList.remove('opacity-100');
+            statusEl.classList.add('opacity-0');
+            statusCard.classList.remove('scale-100');
+            statusCard.classList.add('scale-95');
+
+            updateQueueUI();
+        }
+
+        function updateRobotVisuals(x, y) {
+            const percentX = (x / COLS) * 100;
+            const percentY = (y / ROWS) * 100;
+            // Center the robot in the cell
+            robotEl.style.left = `calc(${percentX}% + (100% / ${COLS} / 2) - 1.5rem)`;
+            robotEl.style.top = `calc(${percentY}% + (100% / ${ROWS} / 2) - 1.5rem)`;
+        }
+
+        function updateQueueUI() {
+            const level = levels[currentLevelIndex];
+            const qEl = document.getElementById('command-queue');
+            qEl.innerHTML = '';
+            
+            commandQueue.forEach((cmd, i) => {
+                const b = document.createElement('div');
+                b.className = `cmd-block ${cmd === 'LOOP' ? 'loop' : ''}`;
+                b.innerHTML = cmdIcons[cmd];
+                b.id = `cmd-block-${i}`;
+                qEl.appendChild(b);
+            });
+
+            const countEl = document.getElementById('cmd-count');
+            countEl.innerText = `${commandQueue.length}/${level.maxCmds}`;
+            
+            if (commandQueue.length >= level.maxCmds) {
+                countEl.classList.add('bg-red-100', 'text-red-600');
+                countEl.classList.remove('bg-slate-200', 'text-slate-600');
+            } else {
+                countEl.classList.add('bg-slate-200', 'text-slate-600');
+                countEl.classList.remove('bg-red-100', 'text-red-600');
+            }
+        }
+
+        function addCommand(cmd) {
+            if (isExecuting) return;
+            const level = levels[currentLevelIndex];
+            if (commandQueue.length < level.maxCmds) {
+                commandQueue.push(cmd);
+                sfx.addCmd();
+                updateQueueUI();
+            } else {
+                sfx.error();
+            }
+        }
+
+        function clearCommands() {
+            if (isExecuting) return;
+            commandQueue = [];
+            sfx.removeCmd();
+            resetRobot();
+            updateQueueUI();
+        }
+
+        function resetRobot() {
+            robotPos = { ...startPos };
+            updateRobotVisuals(robotPos.x, robotPos.y);
+            const level = levels[currentLevelIndex];
+            currentMap = JSON.parse(JSON.stringify(level.map));
+            coinsCollected = 0;
+            
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = document.getElementById(`cell-${x}-${y}`);
+                    const val = currentMap[y][x];
+                    if (val === 'S') {
+                        cell.innerHTML = '<i class="fas fa-star item-star"></i>';
+                    } else if (val === 'C') {
+                        cell.innerHTML = '<i class="fas fa-coins item-coin"></i>';
+                    } else if (val === 0 || val === 'R' || val === 1) {
+                        cell.innerHTML = '';
+                    }
+                }
+            }
+        }
+
+        function showStatus(icon, title, desc, isWin) {
+            const el = document.getElementById('game-status');
+            const card = document.getElementById('status-card');
+            const titleEl = document.getElementById('status-title');
+            
+            el.classList.remove('hidden');
+            setTimeout(() => {
+                el.classList.remove('opacity-0');
+                el.classList.add('opacity-100');
+                card.classList.remove('scale-95');
+                card.classList.add('scale-100');
+            }, 50);
+
+            document.getElementById('status-icon').innerText = icon;
+            titleEl.innerText = title;
+            titleEl.className = `text-3xl font-bold mb-2 ${isWin ? 'text-green-500' : 'text-red-500'}`;
+            document.getElementById('status-desc').innerText = desc;
+            
+            const btn = document.getElementById('btn-next-retry');
+            btn.innerText = isWin ? 'ไปด่านต่อไป' : 'ลองใหม่';
+            btn.className = `ar-target btn-chunky text-white font-bold py-3 px-8 rounded-xl text-xl w-full border-b-4 mt-2 ${isWin ? 'bg-green-500 border-green-700 hover:bg-green-400' : 'bg-orange-500 border-orange-700 hover:bg-orange-400'}`;
+            
+            btn.onclick = () => {
+                sfx.click();
+                if (isWin) {
+                    if (currentLevelIndex < levels.length - 1) {
+                        initLevel(currentLevelIndex + 1);
+                    } else {
+                        switchScreen('screen-gameover');
+                        document.getElementById('level-badge').classList.add('hidden');
+                        sfx.winGame();
+                    }
+                } else {
+                    resetRobot();
+                    el.classList.add('opacity-0');
+                    card.classList.remove('scale-100');
+                    card.classList.add('scale-95');
+                    setTimeout(() => el.classList.add('hidden'), 300);
+                }
+            };
+        }
+
+        // STREAMING_CHUNK:JavaScript - Execution Engine
+        async function runCommands() {
+            if (isExecuting || commandQueue.length === 0) return;
+            isExecuting = true;
+            sfx.click();
+            resetRobot(); 
+
+            let executionSequence = [];
+            for (let i = 0; i < commandQueue.length; i++) {
+                const cmd = commandQueue[i];
+                if (cmd === 'LOOP') {
+                    const prevCmd = executionSequence.length > 0 ? executionSequence[executionSequence.length - 1].action : null;
+                    if (prevCmd && prevCmd !== 'LOOP') {
+                        executionSequence.push({ action: prevCmd, uiIndex: i });
+                        executionSequence.push({ action: prevCmd, uiIndex: i });
+                    }
+                } else {
+                    executionSequence.push({ action: cmd, uiIndex: i });
+                }
+            }
+
+            for (let step of executionSequence) {
+                document.querySelectorAll('.cmd-block').forEach(el => el.classList.remove('executing'));
+                const blockEl = document.getElementById(`cmd-block-${step.uiIndex}`);
+                if (blockEl) blockEl.classList.add('executing');
+
+                await new Promise(resolve => setTimeout(resolve, 600)); 
+
+                let nx = robotPos.x;
+                let ny = robotPos.y;
+
+                if (step.action === 'UP') ny -= 1;
+                else if (step.action === 'DOWN') ny += 1;
+                else if (step.action === 'LEFT') nx -= 1;
+                else if (step.action === 'RIGHT') nx += 1;
+
+                if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
+                    sfx.crash();
+                    isExecuting = false;
+                    showStatus('💥', 'ออกนอกกระดาน!', 'หุ่นยนต์หลุดขอบกระดาน ลองเรียงใหม่นะ', false);
+                    return;
+                }
+
+                if (currentMap[ny][nx] === 1) {
+                    sfx.crash();
+                    isExecuting = false;
+                    showStatus('🧱', 'ชนกำแพง!', 'หุ่นยนต์ชนสิ่งกีดขวาง ลองหาทางอ้อมดู', false);
+                    return;
+                }
+
+                robotPos = { x: nx, y: ny };
+                updateRobotVisuals(nx, ny);
+                sfx.step();
+
+                const cellVal = currentMap[ny][nx];
+                if (cellVal === 'C') {
+                    sfx.coin();
+                    coinsCollected++;
+                    currentMap[ny][nx] = 0; 
+                    document.getElementById(`cell-${nx}-${ny}`).innerHTML = '';
+                } else if (cellVal === 'S') {
+                    if (coinsCollected >= coinsToCollect) {
+                        sfx.winLevel();
+                        isExecuting = false;
+                        showStatus('🌟', 'สำเร็จ!', 'หุ่นยนต์เก็บดาวได้แล้ว เก่งมากๆ', true);
+                        return;
+                    } else {
+                        sfx.error();
+                        isExecuting = false;
+                        showStatus('🪙', 'ลืมเหรียญ!', 'ต้องเก็บเหรียญให้ครบก่อนเก็บดาวนะ', false);
+                        return;
+                    }
+                }
+            }
+
+            document.querySelectorAll('.cmd-block').forEach(el => el.classList.remove('executing'));
+            isExecuting = false;
+            sfx.error();
+            showStatus('🛑', 'คำสั่งหมดแล้ว', 'หุ่นยนต์หยุดเดิน แต่ยังไม่ถึงเป้าหมาย ลองแก้โค้ดดูนะ', false);
+        }
+
+        // Standard Event Listeners
+        document.querySelectorAll('.cmd-add').forEach(btn => {
+            btn.addEventListener('click', (e) => addCommand(e.currentTarget.dataset.cmd));
+        });
+        document.getElementById('btn-clear').addEventListener('click', clearCommands);
+        document.getElementById('btn-run').addEventListener('click', runCommands);
+        
+        document.getElementById('btn-mute').addEventListener('click', (e) => {
+            sfx.muted = !sfx.muted;
+            const icon = e.currentTarget.querySelector('i');
+            if(sfx.muted) {
+                icon.className = 'fas fa-volume-mute text-lg text-red-400';
+            } else {
+                icon.className = 'fas fa-volume-up text-lg';
+                sfx.hover(); 
+            }
+        });
+
+        function switchScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        document.getElementById('btn-start').addEventListener('click', () => {
+            sfx.click();
+            switchScreen('screen-play');
+            initLevel(0);
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            sfx.click();
+            switchScreen('screen-play');
+            initLevel(0);
+        });
+
+
+        // STREAMING_CHUNK:MediaPipe AR Setup - Separate Camera Widget & Global Laser
+        
+        const videoElement = document.getElementById('input_video');
+        const laserOverlay = document.getElementById('global-laser-overlay');
+        const laserCtx = laserOverlay.getContext('2d');
+        
+        const previewCanvas = document.getElementById('preview-camera-canvas');
+        const previewCtx = previewCanvas ? previewCanvas.getContext('2d') : null;
+        
+        const playCanvas = document.getElementById('play-camera-canvas');
+        const playCtx = playCanvas ? playCanvas.getContext('2d') : null;
+
+        // Resize Global Laser Overlay to match window
+        function resizeLaserCanvas() {
+            laserOverlay.width = window.innerWidth;
+            laserOverlay.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeLaserCanvas);
+        resizeLaserCanvas();
+
+        let hoverTarget = null;
+        let hoverStartTime = 0;
+        const HOVER_DURATION = 1000; // 1 second to click
+
+        function onResults(results) {
+            const isStartScreen = document.getElementById('screen-start').classList.contains('active');
+            const activeCanvas = isStartScreen ? previewCanvas : playCanvas;
+            const activeCtx = isStartScreen ? previewCtx : playCtx;
+
+            if (isStartScreen && document.getElementById('camera-loading')) {
+                document.getElementById('camera-loading').style.display = 'none';
+            }
+
+            // 1. Draw video feed onto the small Widget Canvas
+            if (activeCanvas && activeCtx) {
+                activeCanvas.width = videoElement.videoWidth;
+                activeCanvas.height = videoElement.videoHeight;
+                activeCtx.clearRect(0, 0, activeCanvas.width, activeCanvas.height);
+                activeCtx.drawImage(results.image, 0, 0, activeCanvas.width, activeCanvas.height);
+            }
+
+            // Clear Global Laser Overlay
+            laserCtx.clearRect(0, 0, laserOverlay.width, laserOverlay.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0]; 
+                
+                // 2. Draw Skeleton ONLY on the widget canvas (not full screen)
+                if (activeCtx) {
+                    activeCtx.save();
+                    activeCtx.strokeStyle = 'rgba(59, 130, 246, 0.8)'; // Blue-500
+                    activeCtx.lineWidth = 4;
+                    
+                    const connectLocal = (p1, p2) => {
+                        const x1 = (1 - landmarks[p1].x) * activeCanvas.width;
+                        const y1 = landmarks[p1].y * activeCanvas.height;
+                        const x2 = (1 - landmarks[p2].x) * activeCanvas.width;
+                        const y2 = landmarks[p2].y * activeCanvas.height;
+                        activeCtx.beginPath();
+                        activeCtx.moveTo(x1, y1);
+                        activeCtx.lineTo(x2, y2);
+                        activeCtx.stroke();
+                    };
+
+                    [0,1,2,3].forEach(i => connectLocal(i, i+1)); 
+                    [0,5,9,13,17,0].forEach((p, i, arr) => i < 5 && connectLocal(p, arr[i+1])); 
+                    [5,6,7].forEach(i => connectLocal(i, i+1)); 
+                    [9,10,11].forEach(i => connectLocal(i, i+1)); 
+                    [13,14,15].forEach(i => connectLocal(i, i+1)); 
+                    [17,18,19].forEach(i => connectLocal(i, i+1)); 
+                    activeCtx.restore();
+                }
+
+                // 3. Map Index finger tip to Global Screen coordinates
+                const indexTip = landmarks[8];
+                const screenX = (1 - indexTip.x) * window.innerWidth;
+                const screenY = indexTip.y * window.innerHeight;
+
+                // Draw Red Laser Dot on Fullscreen overlay
+                laserCtx.save();
+                laserCtx.beginPath();
+                laserCtx.arc(screenX, screenY, 8, 0, 2 * Math.PI);
+                laserCtx.fillStyle = '#ef4444'; // Red-500
+                laserCtx.fill();
+                laserCtx.shadowColor = 'rgba(239, 68, 68, 0.5)';
+                laserCtx.shadowBlur = 10;
+                
+                // White center for contrast
+                laserCtx.beginPath();
+                laserCtx.arc(screenX, screenY, 3, 0, 2 * Math.PI);
+                laserCtx.fillStyle = '#ffffff';
+                laserCtx.fill();
+
+                // 4. Interactive Hover Logic using Global coordinates
+                // Because laserOverlay has pointer-events:none, this gets the actual DOM element beneath
+                const elementUnderPointer = document.elementFromPoint(screenX, screenY);
+                const interactable = elementUnderPointer ? elementUnderPointer.closest('.ar-target') : null;
+
+                if (interactable && !interactable.disabled && !isExecuting) {
+                    if (hoverTarget !== interactable) {
+                        hoverTarget = interactable;
+                        hoverStartTime = Date.now();
+                        sfx.hover();
+                        interactable.classList.add('simulated-active'); // visual press down
+                    } else {
+                        const elapsed = Date.now() - hoverStartTime;
+                        const progress = Math.min(elapsed / HOVER_DURATION, 1);
+
+                        // Draw Loading Circle around the laser dot
+                        laserCtx.beginPath();
+                        laserCtx.arc(screenX, screenY, 20, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progress));
+                        laserCtx.strokeStyle = '#22c55e'; // Green progress
+                        laserCtx.lineWidth = 4;
+                        laserCtx.stroke();
+
+                        if (progress >= 1) {
+                            // Trigger Click!
+                            interactable.click();
+                            hoverTarget.classList.remove('simulated-active');
+                            hoverTarget = null; 
+                            
+                            // Visual Pop on Canvas
+                            laserCtx.beginPath();
+                            laserCtx.arc(screenX, screenY, 35, 0, Math.PI * 2);
+                            laserCtx.fillStyle = 'rgba(34, 197, 94, 0.6)';
+                            laserCtx.fill();
+                        }
+                    }
+                } else {
+                    if (hoverTarget) {
+                        hoverTarget.classList.remove('simulated-active');
+                        hoverTarget = null;
+                    }
+                }
+                laserCtx.restore();
+            } else {
+                if (hoverTarget) {
+                    hoverTarget.classList.remove('simulated-active');
+                    hoverTarget = null;
+                }
+            }
+        }
+
+        // Initialize MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+        hands.onResults(onResults);
+
+        // Start Camera
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+
+    </script>
+</body>
+</html>
