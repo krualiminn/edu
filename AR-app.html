@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR ภารกิจหุ่นยนต์เก็บดาว - Full Web App</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;800&family=Orbitron:wght@500;700&display=swap');
+        
+        :root {
+            --primary: #00f0ff;
+            --secondary: #7000ff;
+            --danger: #ff003c;
+            --success: #00ff66;
+            --bg-dark: #050510;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            font-family: 'Prompt', sans-serif;
+            color: white;
+            user-select: none;
+            touch-action: none;
+        }
+
+        .font-num { font-family: 'Orbitron', sans-serif; }
+
+        /* Sci-Fi Glow Text */
+        .neon-text-cyan { text-shadow: 0 0 5px var(--primary), 0 0 15px var(--primary), 0 0 30px #0055ff; }
+        .neon-text-green { text-shadow: 0 0 5px var(--success), 0 0 15px var(--success); }
+        .neon-text-red { text-shadow: 0 0 5px var(--danger), 0 0 15px var(--danger); }
+
+        /* Glassmorphism panels */
+        .hud-panel {
+            background: rgba(5, 5, 16, 0.65);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(0, 240, 255, 0.05);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #webcam { display: none; }
+        #output_canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, rgba(112,0,255,0.1) 0%, rgba(5,5,16,0.95) 100%);
+            transition: opacity 0.5s ease;
+            pointer-events: auto;
+            z-index: 50;
+        }
+        
+        .hidden-screen {
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .btn-scifi {
+            background: linear-gradient(135deg, rgba(0,240,255,0.2) 0%, rgba(112,0,255,0.4) 100%);
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 10px var(--primary), inset 0 0 10px var(--primary);
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            pointer-events: auto;
+        }
+        .btn-scifi:hover {
+            box-shadow: 0 0 30px var(--primary), inset 0 0 20px var(--primary);
+            background: linear-gradient(135deg, rgba(0,240,255,0.4) 0%, rgba(112,0,255,0.6) 100%);
+            transform: scale(1.05);
+        }
+
+        #mode-indicator {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 14px;
+            color: var(--primary);
+            background: rgba(0,0,0,0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: 1px solid var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="output_canvas"></canvas>
+
+        <div id="ui-layer">
+            <!-- Start Screen -->
+            <div id="screen-start" class="screen">
+                <div class="hud-panel p-10 rounded-2xl max-w-4xl w-11/12 text-center relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-cyan-400"></div>
+                    <div class="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-cyan-400"></div>
+                    <div class="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-cyan-400"></div>
+                    <div class="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-cyan-400"></div>
+
+                    <h1 class="text-4xl md:text-6xl font-extrabold mb-6 neon-text-cyan tracking-wide">
+                        🤖 ภารกิจหุ่นยนต์เก็บดาว
+                    </h1>
+                    <p class="text-lg md:text-xl mb-8 text-cyan-100 font-light leading-relaxed">
+                        ทดสอบการเขียนโปรแกรมด้วยร่างกาย! ใช้นิ้วชี้เป็นเลเซอร์ 👆 หรือใช้เมาส์คลิก 🖱️<br>
+                        เพื่อเรียงคำสั่งพาหุ่นยนต์ไปให้ถึงเป้าหมาย
+                    </p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 text-left">
+                        <div class="bg-black/40 p-5 rounded-lg border border-cyan-500/30 hover:border-cyan-400 transition">
+                            <h3 class="text-xl text-cyan-400 font-bold mb-2">1. เตรียมตัว</h3>
+                            <p class="text-sm text-gray-300">ยืนห่างกล้อง 1 เมตร หรือใช้เมาส์/ทัชสกรีนเล่นได้เลย</p>
+                        </div>
+                        <div class="bg-black/40 p-5 rounded-lg border border-cyan-500/30 hover:border-cyan-400 transition">
+                            <h3 class="text-xl text-cyan-400 font-bold mb-2">2. ป้อนคำสั่ง</h3>
+                            <p class="text-sm text-gray-300">แช่มือในปุ่มวงกลม หรือคลิก เพื่อเรียงลำดับอัลกอริทึม</p>
+                        </div>
+                        <div class="bg-black/40 p-5 rounded-lg border border-cyan-500/30 hover:border-cyan-400 transition">
+                            <h3 class="text-xl text-cyan-400 font-bold mb-2">3. รันโปรแกรม</h3>
+                            <p class="text-sm text-gray-300">กดปุ่ม RUN เพื่อดูผลลัพธ์ หากผิดให้ใช้ปุ่มลบ (Debug)</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-4">
+                        <button id="btn-begin" class="btn-scifi text-2xl font-bold py-4 px-12 rounded-full pointer-events-auto">
+                            เริ่มระบบกล้อง (START AR)
+                        </button>
+                        <button id="btn-fullscreen" class="px-6 py-2 bg-slate-800/80 rounded-full text-cyan-300 border border-cyan-500/50 hover:bg-slate-700 pointer-events-auto transition flex items-center gap-2">
+                            <span>🖥️</span> ขยายเต็มจอ (Fullscreen)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Result Screen -->
+            <div id="screen-result" class="screen hidden-screen">
+                <div class="hud-panel p-12 rounded-2xl text-center max-w-2xl w-11/12 relative">
+                    <h2 id="result-title" class="text-5xl md:text-7xl font-extrabold mb-4 uppercase tracking-widest">SUCCESS</h2>
+                    <p id="result-desc" class="text-xl md:text-2xl mb-8 text-gray-200">คุณเขียนโค้ดได้สมบูรณ์แบบ!</p>
+                    <div class="bg-black/50 p-4 rounded-xl mb-8 inline-block border border-cyan-500/30">
+                        <p class="text-cyan-300 font-bold text-lg">คะแนนรวม: <span id="final-score" class="font-num text-3xl text-white">0</span></p>
+                    </div><br>
+                    <button id="btn-next" class="btn-scifi text-2xl font-bold py-4 px-12 rounded-full pointer-events-auto">
+                        ด่านต่อไป (NEXT LEVEL)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Top HUD Layer -->
+            <div id="hud-top" class="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none opacity-0 transition-opacity duration-500">
+                <div class="hud-panel px-6 py-3 rounded-xl border-l-4 border-cyan-400">
+                    <h2 id="level-title" class="text-2xl font-bold text-white neon-text-cyan">LEVEL 1</h2>
+                    <p id="level-hint" class="text-sm text-cyan-200 mt-1">Hint: เดินหน้าตรงไปเลย</p>
+                </div>
+                
+                <!-- Score & Time Panel -->
+                <div class="hud-panel px-6 py-3 rounded-xl border-r-4 border-green-400 flex gap-6 pointer-events-none">
+                    <div class="text-right">
+                        <div class="text-xs text-green-300 uppercase tracking-widest font-bold">Score</div>
+                        <div id="score-display" class="text-2xl font-bold font-num text-white">0</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs text-cyan-300 uppercase tracking-widest font-bold">Time</div>
+                        <div id="time-display" class="text-2xl font-bold font-num text-white">00:00</div>
+                    </div>
+                </div>
+
+                <!-- Warning Text -->
+                <div id="hand-warning" class="absolute top-24 left-1/2 -translate-x-1/2 bg-red-600/90 text-white px-6 py-2 rounded-full font-bold shadow-[0_0_15px_red] transition-opacity duration-300 opacity-0">
+                    ⚠️ ไม่พบมือ (ใช้เมาส์แทนได้)
+                </div>
+            </div>
+
+            <div id="mode-indicator">🎮 Input: Mouse / Touch</div>
+        </div>
+    </div>
+
+    <script>
+        // --- SYNTH AUDIO ENGINE ---
+        class SynthAudio {
+            constructor() { this.ctx = null; this.muted = false; }
+            init() { 
+                if(!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); 
+                if(this.ctx.state === 'suspended') this.ctx.resume();
+            }
+            play(freq, type, dur, vol) {
+                if(this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type; osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0, this.ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(); osc.stop(this.ctx.currentTime + dur);
+                } catch(e){}
+            }
+            hover() { this.play(800, 'sine', 0.1, 0.02); }
+            click() { this.play(1200, 'square', 0.1, 0.05); setTimeout(()=>this.play(1800, 'square', 0.15, 0.05), 50); }
+            move()  { this.play(300, 'sawtooth', 0.15, 0.05); }
+            turn()  { this.play(500, 'triangle', 0.15, 0.05); }
+            error() { this.play(150, 'sawtooth', 0.3, 0.1); setTimeout(()=>this.play(100, 'sawtooth', 0.4, 0.1), 150); }
+            win()   { [523, 659, 784, 1046].forEach((f,i)=>setTimeout(()=>this.play(f, 'square', 0.2, 0.05), i*120)); }
+        }
+        const audio = new SynthAudio();
+
+        // --- MATH & UTILS ---
+        const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        // --- GAME DATA ---
+        const canvas = document.getElementById('output_canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        const LEVELS = [
+            { id: 1, title: "ด่าน 1: เริ่มต้นภารกิจ", hint: "กดปุ่ม 'เดินหน้า' 3 ครั้ง แล้วกด RUN", size: 4, start: {x:1, y:3, dir:0}, star: {x:1, y:0}, obs: [], pre: [], max: 4 },
+            { id: 2, title: "ด่าน 2: หลบอุกกาบาต", hint: "เดินหน้า แล้ว หันขวา เพื่อหลบหิน", size: 5, start: {x:1, y:4, dir:0}, star: {x:3, y:2}, obs: [{x:1,y:2},{x:2,y:2}], pre: [], max: 6 },
+            { id: 3, title: "ด่าน 3: แก้ Bug โค้ดผิด", hint: "มีโค้ดผิดอยู่! ใช้ปุ่ม 'ลบ' (Undo) แล้วสั่งใหม่", size: 5, start: {x:2, y:4, dir:0}, star: {x:0, y:2}, obs: [{x:1,y:3},{x:2,y:2}], pre: ['FORWARD','RIGHT','FORWARD'], max: 7 },
+            { id: 4, title: "ด่าน 4: หักหลบซิกแซก", hint: "อุกกาบาตเยอะมาก ลองหาทางหลบไปให้ได้!", size: 5, start: {x:0, y:4, dir:0}, star: {x:4, y:0}, obs: [{x:1,y:3},{x:2,y:3},{x:2,y:1},{x:3,y:1}], pre: [], max: 10 },
+            { id: 5, title: "ด่าน 5: วงกตอวกาศ", hint: "วางแผนให้ดี มีจำนวนคำสั่งจำกัด!", size: 6, start: {x:2, y:5, dir:0}, star: {x:3, y:0}, obs: [{x:1,y:4},{x:2,y:4},{x:4,y:4},{x:4,y:3},{x:4,y:2},{x:3,y:2},{x:1,y:2},{x:1,y:1}], pre: [], max: 12 }
+        ];
+
+        let state = {
+            status: 'START', // START, PLAY, EXEC, RESULT
+            lvlIdx: 0,
+            bot: { x: 0, y: 0, dir: 0 },
+            displayBot: { x: 0, y: 0, dir: 0 },
+            cmds: [],
+            particles: [],
+            score: 0,
+            timeElapsed: 0,
+            timerInterval: null
+        };
+
+        let cursor = { x: -100, y: -100, active: false, source: 'none' };
+        let arButtons = [];
+        let hoverTarget = null;
+        let hoverTime = 0;
+        const HOVER_REQ = 0.8; // seconds
+
+        function resize() {
+            width = window.innerWidth; height = window.innerHeight;
+            canvas.width = width; canvas.height = height;
+            initParticles();
+            buildButtons();
+        }
+        window.addEventListener('resize', resize);
+        
+        function startTimer() {
+            if(state.timerInterval) clearInterval(state.timerInterval);
+            state.timerInterval = setInterval(() => {
+                if(state.status === 'PLAY' || state.status === 'EXEC') {
+                    state.timeElapsed++;
+                    document.getElementById('time-display').innerText = formatTime(state.timeElapsed);
+                }
+            }, 1000);
+        }
+
+        function initLevel() {
+            const l = LEVELS[state.lvlIdx];
+            state.bot = { ...l.start };
+            state.displayBot = { ...l.start };
+            state.cmds = [...l.pre];
+            state.status = 'PLAY';
+            hoverTarget = null; hoverTime = 0;
+            
+            document.getElementById('hud-top').style.opacity = '1';
+            document.getElementById('level-title').innerText = l.title;
+            document.getElementById('level-hint').innerText = "💡 คำใบ้: " + l.hint;
+            document.getElementById('score-display').innerText = state.score;
+            buildButtons();
+            
+            // Reset timer on first level
+            if(state.lvlIdx === 0) {
+                state.timeElapsed = 0;
+                state.score = 0;
+                document.getElementById('time-display').innerText = formatTime(0);
+                startTimer();
+            }
+        }
+
+        function initParticles() {
+            state.particles = [];
+            for(let i=0; i<50; i++) {
+                state.particles.push({
+                    x: Math.random() * width, y: Math.random() * height,
+                    s: Math.random() * 2 + 1, v: Math.random() * 0.5 + 0.1
+                });
+            }
+        }
+
+        function drawParticles() {
+            ctx.fillStyle = 'rgba(0, 240, 255, 0.5)';
+            state.particles.forEach(p => {
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI*2); ctx.fill();
+                p.y -= p.v; if(p.y < 0) p.y = height;
+            });
+        }
+
+        function buildButtons() {
+            if(state.status === 'START') return;
+            // Responsive button sizing
+            const r = Math.min(width * 0.08, 55); 
+            const gap = r * 0.5;
+            const startX = width/2 - (r*2*5 + gap*4)/2 + r;
+            const y = height - r - Math.max(20, height*0.05);
+
+            const isPlay = state.status === 'PLAY';
+            const cBase = isPlay ? '#00f0ff' : '#475569';
+            const cAct = isPlay ? '#00ff66' : '#475569';
+            const cDel = isPlay ? '#ff003c' : '#475569';
+
+            arButtons = [
+                { id: 'FORWARD', x: startX, y: y, r: r, txt: 'เดินหน้า', icon: '⬆️', col: cBase },
+                { id: 'LEFT', x: startX + (r*2+gap), y: y, r: r, txt: 'หันซ้าย', icon: '⬅️', col: cBase },
+                { id: 'RIGHT', x: startX + (r*2+gap)*2, y: y, r: r, txt: 'หันขวา', icon: '➡️', col: cBase },
+                { id: 'UNDO', x: startX + (r*2+gap)*3, y: y, r: r, txt: 'ลบ', icon: '🔙', col: cDel },
+                { id: 'RUN', x: startX + (r*2+gap)*4, y: y, r: r, txt: 'รันคำสั่ง', icon: '▶️', col: cAct },
+                { id: 'MUTE', x: width - r - 20, y: r + 20, r: r*0.6, txt: 'เสียง', icon: audio.muted?'🔇':'🔊', col: '#b8c2cc' }
+            ];
+        }
+
+        function drawHoloCircle(b, isHover) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+            
+            ctx.shadowColor = b.col;
+            ctx.shadowBlur = isHover ? 30 : 10;
+            ctx.fillStyle = isHover ? `${b.col}40` : 'rgba(5, 5, 16, 0.8)';
+            ctx.fill();
+            
+            ctx.lineWidth = isHover ? 4 : 2;
+            ctx.strokeStyle = b.col;
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `${b.r*0.7}px Arial`;
+            ctx.fillText(b.icon, b.x, b.y - b.r*0.1);
+            ctx.font = `bold ${b.r*0.25}px Prompt`;
+            ctx.fillStyle = 'white';
+            ctx.fillText(b.txt, b.x, b.y + b.r*0.5);
+            ctx.restore();
+        }
+
+        function drawGridAndActors() {
+            const l = LEVELS[state.lvlIdx];
+            const panelW = Math.min(width * 0.5, height * 0.55);
+            const gx = width/2 - panelW/2;
+            const gy = height*0.15;
+            const cs = panelW / l.size;
+
+            ctx.save();
+            // Grid BG
+            ctx.fillStyle = 'rgba(10, 15, 30, 0.7)';
+            ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 15;
+            ctx.beginPath(); ctx.roundRect(gx, gy, panelW, panelW, 10);
+            ctx.fill(); ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Lines
+            ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
+            ctx.lineWidth = 1;
+            for(let i=1; i<l.size; i++) {
+                ctx.beginPath(); ctx.moveTo(gx+i*cs, gy); ctx.lineTo(gx+i*cs, gy+panelW); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(gx, gy+i*cs); ctx.lineTo(gx+panelW, gy+i*cs); ctx.stroke();
+            }
+
+            const getCenter = (x, y) => ({ x: gx + x*cs + cs/2, y: gy + y*cs + cs/2 });
+
+            // Star
+            const sc = getCenter(l.star.x, l.star.y);
+            const pulse = 1 + Math.sin(Date.now()/150)*0.15;
+            ctx.font = `${cs*0.6}px Arial`; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.save(); ctx.translate(sc.x, sc.y); ctx.scale(pulse,pulse);
+            ctx.fillText('🌟', 0, 0); ctx.restore();
+
+            // Obstacles
+            l.obs.forEach(o => {
+                const c = getCenter(o.x, o.y);
+                ctx.fillText('☄️', c.x, c.y); 
+            });
+
+            // Robot Smooth Anim
+            state.displayBot.x = lerp(state.displayBot.x, state.bot.x, 0.15);
+            state.displayBot.y = lerp(state.displayBot.y, state.bot.y, 0.15);
+            let diffDir = state.bot.dir - state.displayBot.dir;
+            if (diffDir > 2) diffDir -= 4;
+            if (diffDir < -2) diffDir += 4;
+            state.displayBot.dir += diffDir * 0.15;
+
+            const rc = getCenter(state.displayBot.x, state.displayBot.y);
+            ctx.save();
+            ctx.translate(rc.x, rc.y);
+            ctx.rotate(state.displayBot.dir * (Math.PI/2));
+            ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 20;
+            ctx.fillText('🤖', 0, 0);
+            
+            ctx.shadowBlur = 0; ctx.fillStyle = '#00ff66';
+            ctx.beginPath(); ctx.moveTo(0, -cs*0.4); ctx.lineTo(-cs*0.1, -cs*0.25); ctx.lineTo(cs*0.1, -cs*0.25); ctx.fill();
+            ctx.restore();
+
+            // Command Queue
+            const qw = Math.max(200, width*0.15);
+            const qh = panelW;
+            const qx = Math.max(10, gx - qw - 30);
+            
+            ctx.fillStyle = 'rgba(5, 5, 16, 0.8)';
+            ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+            ctx.beginPath(); ctx.roundRect(qx, gy, qw, qh, 10); ctx.fill(); ctx.stroke();
+
+            ctx.fillStyle = '#00f0ff'; ctx.font = 'bold 20px Prompt'; ctx.textAlign='center';
+            ctx.fillText('ALGORITHM', qx+qw/2, gy+30);
+            ctx.fillStyle = state.cmds.length >= l.max ? '#ff003c' : '#7f8ea3';
+            ctx.font = '14px Orbitron';
+            ctx.fillText(`${state.cmds.length} / ${l.max} LIMIT`, qx+qw/2, gy+50);
+
+            const icons = {'FORWARD':'⬆️ เดินหน้า', 'LEFT':'⬅️ ซ้าย', 'RIGHT':'➡️ ขวา'};
+            state.cmds.forEach((cmd, i) => {
+                const itemY = gy + 90 + (i*35);
+                if(state.status === 'EXEC' && i === execStep) {
+                    ctx.fillStyle = 'rgba(0, 255, 102, 0.3)';
+                    ctx.fillRect(qx+5, itemY-18, qw-10, 30);
+                    ctx.fillStyle = '#00ff66';
+                } else {
+                    ctx.fillStyle = 'white';
+                }
+                ctx.textAlign='left'; ctx.font = '600 16px Prompt';
+                ctx.fillText(`${i+1}. ${icons[cmd]}`, qx+20, itemY);
+            });
+            ctx.restore();
+        }
+
+        function handleAction(id) {
+            if(id === 'MUTE') { 
+                audio.muted = !audio.muted; 
+                arButtons.find(b=>b.id==='MUTE').icon = audio.muted?'🔇':'🔊';
+                return; 
+            }
+            if(state.status !== 'PLAY') return;
+
+            const l = LEVELS[state.lvlIdx];
+            if(['FORWARD','LEFT','RIGHT'].includes(id)) {
+                if(state.cmds.length < l.max) {
+                    state.cmds.push(id); audio.click();
+                } else { audio.error(); }
+            } else if(id === 'UNDO') {
+                if(state.cmds.length > 0) { state.cmds.pop(); audio.click(); }
+            } else if(id === 'RUN') {
+                runAlgorithm();
+            }
+        }
+
+        // Mouse/Touch logic
+        const updateMouse = (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            let mx, my;
+            if(e.touches && e.touches.length > 0) {
+                mx = e.touches[0].clientX - rect.left;
+                my = e.touches[0].clientY - rect.top;
+            } else {
+                mx = e.clientX - rect.left;
+                my = e.clientY - rect.top;
+            }
+            cursor = { x: mx, y: my, active: true, source: 'mouse' };
+            document.getElementById('mode-indicator').innerText = '🎮 Input: Mouse / Touch';
+        };
+        const resetMouse = () => { if(cursor.source === 'mouse') cursor.active = false; };
+        
+        canvas.addEventListener('mousemove', updateMouse);
+        canvas.addEventListener('touchmove', updateMouse, {passive:false});
+        const clickMouse = (e) => {
+            updateMouse(e);
+            if(state.status !== 'PLAY' && state.status !== 'EXEC') return;
+            for(let b of arButtons) {
+                const dx = cursor.x - b.x, dy = cursor.y - b.y;
+                if(dx*dx + dy*dy < b.r*b.r) { handleAction(b.id); break; }
+            }
+        };
+        canvas.addEventListener('mousedown', clickMouse);
+        canvas.addEventListener('touchstart', clickMouse, {passive:false});
+        canvas.addEventListener('mouseleave', resetMouse);
+        canvas.addEventListener('touchend', resetMouse);
+
+        function processCursorLogic(dt) {
+            if(!cursor.active || state.status === 'START') return;
+
+            let hit = null;
+            for(let b of arButtons) {
+                const dx = cursor.x - b.x;
+                const dy = cursor.y - b.y;
+                if(dx*dx + dy*dy < b.r*b.r) { hit = b; break; }
+            }
+
+            if(hit && state.status === 'PLAY') {
+                if(hoverTarget !== hit) {
+                    hoverTarget = hit; hoverTime = 0; audio.hover();
+                } else if(cursor.source === 'hand') {
+                    hoverTime += dt;
+                    if(hoverTime >= HOVER_REQ) {
+                        handleAction(hit.id);
+                        hoverTarget = null; hoverTime = 0;
+                    }
+                }
+            } else {
+                hoverTarget = null; hoverTime = 0;
+            }
+
+            ctx.save();
+            ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 8, 0, Math.PI*2);
+            ctx.fillStyle = cursor.source === 'hand' ? '#00f0ff' : '#00ff66';
+            ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle; ctx.fill();
+            
+            if(hoverTime > 0 && cursor.source === 'hand') {
+                ctx.beginPath(); 
+                const progress = hoverTime / HOVER_REQ;
+                ctx.arc(cursor.x, cursor.y, 20, -Math.PI/2, (-Math.PI/2) + (Math.PI*2*progress));
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.lineCap='round';
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        let execStep = 0;
+        let execTimer = null;
+
+        function runAlgorithm() {
+            if(state.cmds.length === 0) return;
+            state.status = 'EXEC'; execStep = 0;
+            audio.click();
+            
+            const l = LEVELS[state.lvlIdx];
+            state.bot = { ...l.start };
+            state.displayBot = { ...l.start };
+            
+            if(execTimer) clearTimeout(execTimer);
+            setTimeout(doStep, 600);
+        }
+
+        function doStep() {
+            if(execStep >= state.cmds.length) {
+                setTimeout(checkWin, 600); return;
+            }
+
+            const cmd = state.cmds[execStep];
+            const l = LEVELS[state.lvlIdx];
+            let nx = state.bot.x, ny = state.bot.y, nd = state.bot.dir;
+
+            if(cmd === 'FORWARD') {
+                if(nd===0) ny--; else if(nd===1) nx++; else if(nd===2) ny++; else if(nd===3) nx--;
+                audio.move();
+            } else if(cmd === 'LEFT') {
+                nd = (nd+3)%4; audio.turn();
+            } else if(cmd === 'RIGHT') {
+                nd = (nd+1)%4; audio.turn();
+            }
+
+            let crash = false;
+            if(nx<0 || nx>=l.size || ny<0 || ny>=l.size) crash = true;
+            else if(l.obs.some(o => o.x===nx && o.y===ny)) crash = true;
+
+            if(crash) {
+                audio.error();
+                showEnd(false, "เกิดการชน! ตกขอบหรือชนอุกกาบาต 💥");
+                return;
+            }
+
+            state.bot = {x:nx, y:ny, dir:nd};
+            execStep++;
+            execTimer = setTimeout(doStep, 800);
+        }
+
+        function checkWin() {
+            const l = LEVELS[state.lvlIdx];
+            if(state.bot.x === l.star.x && state.bot.y === l.star.y) {
+                // Calc Score
+                let bonus = (l.max - state.cmds.length) * 10;
+                let levelScore = 100 + Math.max(0, bonus);
+                state.score += levelScore;
+                document.getElementById('score-display').innerText = state.score;
+                document.getElementById('final-score').innerText = state.score;
+                
+                audio.win(); showEnd(true, `ยอดเยี่ยม! ภารกิจสำเร็จ ⭐ (+${levelScore} แต้ม)`);
+            } else {
+                audio.error(); showEnd(false, "ยังไม่ถึงเป้าหมาย! ลองแก้ Bug ดูนะ 🐛");
+            }
+        }
+
+        function showEnd(win, msg) {
+            state.status = 'RESULT';
+            const scr = document.getElementById('screen-result');
+            const tit = document.getElementById('result-title');
+            const des = document.getElementById('result-desc');
+            const btn = document.getElementById('btn-next');
+            
+            scr.classList.remove('hidden-screen');
+            des.innerText = msg;
+            
+            if(win) {
+                tit.innerText = "MISSION SUCCESS";
+                tit.className = "text-5xl md:text-7xl font-extrabold mb-4 neon-text-green text-green-400";
+                if(state.lvlIdx < LEVELS.length - 1) {
+                    btn.innerText = "ด่านต่อไป 🚀";
+                    btn.onclick = () => { state.lvlIdx++; scr.classList.add('hidden-screen'); initLevel(); };
+                } else {
+                    btn.innerText = "จบเกม! เริ่มเล่นใหม่ 🔄";
+                    btn.onclick = () => { state.lvlIdx = 0; scr.classList.add('hidden-screen'); initLevel(); };
+                }
+            } else {
+                tit.innerText = "SYSTEM FAILURE";
+                tit.className = "text-5xl md:text-7xl font-extrabold mb-4 neon-text-red text-red-500";
+                btn.innerText = "ลองแก้ไขใหม่ 🛠️";
+                btn.onclick = () => { scr.classList.add('hidden-screen'); initLevel(); };
+            }
+        }
+
+        let lastTime = performance.now();
+        let videoMapping = { w: 0, h: 0, ox: 0, oy: 0 }; 
+
+        function onFrameLoop() {
+            const now = performance.now();
+            const dt = (now - lastTime) / 1000;
+            lastTime = now;
+
+            ctx.clearRect(0,0,width,height);
+            ctx.fillStyle = 'rgba(5, 5, 16, 0.85)'; 
+            
+            const vid = document.getElementById('webcam');
+            if(vid.readyState >= 2) { 
+                ctx.save();
+                ctx.translate(width, 0); ctx.scale(-1, 1); 
+                
+                const vr = vid.videoWidth / vid.videoHeight;
+                const sr = width / height;
+                
+                if(sr > vr) {
+                    videoMapping.w = width; videoMapping.h = width / vr;
+                    videoMapping.ox = 0; videoMapping.oy = (height - videoMapping.h) / 2;
+                } else {
+                    videoMapping.h = height; videoMapping.w = height * vr;
+                    videoMapping.ox = (width - videoMapping.w) / 2; videoMapping.oy = 0;
+                }
+                
+                ctx.drawImage(vid, videoMapping.ox, videoMapping.oy, videoMapping.w, videoMapping.h);
+                ctx.restore();
+                ctx.fillRect(0,0,width,height); 
+            } else {
+                ctx.fillRect(0,0,width,height); 
+            }
+
+            drawParticles();
+
+            if(state.status !== 'START') {
+                drawGridAndActors();
+                arButtons.forEach(b => drawHoloCircle(b, hoverTarget === b));
+                processCursorLogic(dt);
+            }
+            
+            requestAnimationFrame(onFrameLoop);
+        }
+
+        const warningEl = document.getElementById('hand-warning');
+        function onHandResults(results) {
+            if(results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                warningEl.style.opacity = '0';
+                const lm = results.multiHandLandmarks[0];
+                
+                const mapped = lm.map(p => ({
+                    x: width - (videoMapping.ox + (p.x * videoMapping.w)), 
+                    y: videoMapping.oy + (p.y * videoMapping.h)
+                }));
+
+                cursor = { x: mapped[8].x, y: mapped[8].y, active: true, source: 'hand' };
+                document.getElementById('mode-indicator').innerText = '🎮 Input: AR Camera';
+
+                if(state.status !== 'START' && state.status !== 'RESULT') {
+                    ctx.save();
+                    ctx.shadowBlur = 10; ctx.shadowColor = '#00f0ff';
+                    ctx.strokeStyle = 'rgba(0, 240, 255, 0.6)'; ctx.lineWidth = 3;
+                    if (typeof HAND_CONNECTIONS !== 'undefined') {
+                        HAND_CONNECTIONS.forEach(c => {
+                            ctx.beginPath(); ctx.moveTo(mapped[c[0]].x, mapped[c[0]].y); ctx.lineTo(mapped[c[1]].x, mapped[c[1]].y); ctx.stroke();
+                        });
+                    }
+                    ctx.fillStyle = '#fff';
+                    mapped.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill(); });
+                    ctx.restore();
+                }
+            } else {
+                if(state.status !== 'START' && state.status !== 'RESULT' && cursor.source === 'hand') {
+                    warningEl.style.opacity = '1';
+                    cursor.active = false;
+                }
+            }
+        }
+
+        // Boot
+        resize(); 
+        requestAnimationFrame(onFrameLoop); 
+
+        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        hands.onResults(onHandResults);
+
+        const cam = new Camera(document.getElementById('webcam'), {
+            onFrame: async () => { await hands.send({image: document.getElementById('webcam')}); },
+            width: 640, height: 480
+        });
+
+        document.getElementById('btn-begin').addEventListener('click', () => {
+            audio.init(); audio.click();
+            document.getElementById('btn-begin').innerText = "CONNECTING...";
+            
+            cam.start().then(() => {
+                document.getElementById('screen-start').classList.add('hidden-screen');
+                initLevel();
+            }).catch(e => {
+                console.warn("Camera fail/blocked. Mouse mode ready.", e);
+                document.getElementById('screen-start').classList.add('hidden-screen');
+                initLevel();
+            });
+        });
+
+        document.getElementById('btn-fullscreen').addEventListener('click', () => {
+            audio.init(); audio.click();
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+                document.getElementById('btn-fullscreen').innerHTML = "📉 ออกจากเต็มจอ";
+            } else {
+                document.exitFullscreen();
+                document.getElementById('btn-fullscreen').innerHTML = "<span>🖥️</span> ขยายเต็มจอ (Fullscreen)";
+            }
+        });
+
+    </script>
+</body>
+</html>
