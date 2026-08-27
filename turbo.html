@@ -70,13 +70,16 @@
 
         // Provide Fallbacks for standalone HTML running outside the specific artifact environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'tobo-quiz-multiplayer-v1';
-        let firebaseConfig = {};
+        let firebaseConfig = { apiKey: "dummy", authDomain: "dummy", projectId: "dummy" };
+        
         try {
-            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-                // Dummy config will fail network requests but won't crash initialization
-                apiKey: "dummy", authDomain: "dummy", projectId: "dummy"
-            };
-        } catch (e) { console.warn("Firebase config parsing failed"); }
+            if (typeof __firebase_config !== 'undefined') {
+                // รองรับทั้งกรณีที่ config เป็น String และ Object
+                firebaseConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+            }
+        } catch (e) { 
+            console.warn("Firebase config parsing failed:", e); 
+        }
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -88,6 +91,9 @@
             doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc,
             initialToken: typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null
         };
+        
+        // แจ้งเตือนเมื่อ Firebase พร้อมใช้งาน
+        window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
     <script type="text/babel">
@@ -145,20 +151,32 @@
                     if (!window.fb) return;
                     try {
                         if (window.fb.initialToken) {
-                            await window.fb.signInWithCustomToken(window.fb.auth, window.fb.initialToken);
+                            try {
+                                await window.fb.signInWithCustomToken(window.fb.auth, window.fb.initialToken);
+                            } catch (tokenErr) {
+                                console.warn("Custom token failed, trying anonymous auth...", tokenErr);
+                                await window.fb.signInAnonymously(window.fb.auth);
+                            }
                         } else {
                             await window.fb.signInAnonymously(window.fb.auth);
                         }
                         setUser(window.fb.auth.currentUser);
                     } catch (err) {
                         console.error("Auth error:", err);
-                        setAuthError("เชื่อมต่อระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ");
+                        setAuthError("เชื่อมต่อระบบไม่สำเร็จ: " + err.message);
                     }
                 };
-                initAuth();
+
+                // ตรวจสอบว่า Firebase โหลดเสร็จหรือยัง
+                if (window.fb) {
+                    initAuth();
+                } else {
+                    window.addEventListener('firebase-ready', initAuth);
+                    return () => window.removeEventListener('firebase-ready', initAuth);
+                }
             }, []);
 
-            if (authError) return <div className="flex h-screen items-center justify-center text-rose-500 font-bold">{authError}</div>;
+            if (authError) return <div className="flex h-screen items-center justify-center text-rose-500 font-bold p-8 text-center">{authError}</div>;
             if (!user) return <div className="flex flex-col h-screen items-center justify-center bg-slate-900 text-white"><div className="loader mb-4"></div><div>กำลังเชื่อมต่อเซิร์ฟเวอร์...</div></div>;
 
             const leaveRoom = async () => {
