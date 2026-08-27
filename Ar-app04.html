@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR เกม: เลือกฝั่ง ต้านโกง</title>
+    
+    <!-- นำเข้า Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- นำเข้าฟอนต์ Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- นำเข้า MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6.1629159505/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #000;
+            color: white;
+            overflow: hidden;
+            touch-action: none;
+        }
+        
+        /* สไตล์กระจก Hologram สวยๆ */
+        .holo-panel {
+            background: rgba(10, 15, 30, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(255,255,255,0.05);
+            border-radius: 24px;
+        }
+
+        .holo-panel-blue { border-color: rgba(59, 130, 246, 0.5); box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
+        .holo-panel-red { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+
+        /* เอฟเฟกต์แสงเรืองแสง */
+        .neon-text-blue { text-shadow: 0 0 10px #3b82f6, 0 0 20px #3b82f6; }
+        .neon-text-red { text-shadow: 0 0 10px #ef4444, 0 0 20px #ef4444; }
+        
+        /* อนิเมชันปุ่มลอย */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+
+        /* วงกลมโหลด Progress */
+        svg.progress-ring { transform: rotate(-90deg); }
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.1s linear;
+            transform-origin: 50% 50%;
+        }
+        
+        #video-element { display: none; }
+        #output-canvas {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+        }
+
+        /* สถานะเมื่อกำลังเลือกคำตอบ (Hover State) */
+        .targeting-a { background: radial-gradient(circle at left, rgba(59,130,246,0.3) 0%, transparent 50%); }
+        .targeting-b { background: radial-gradient(circle at right, rgba(239,68,68,0.3) 0%, transparent 50%); }
+    </style>
+</head>
+<body class="relative w-screen h-screen">
+
+    <div class="absolute inset-0 z-0 flex items-center justify-center bg-gray-900">
+        <video id="video-element" autoplay playsinline></video>
+        <canvas id="output-canvas"></canvas>
+        <!-- เลเยอร์แสดงแสง Feedback เมื่อกำลังเลือก -->
+        <div id="target-glow-overlay" class="absolute inset-0 pointer-events-none transition-all duration-300"></div>
+    </div>
+
+    <div id="play-ui" class="absolute inset-0 z-10 hidden pointer-events-none">
+        
+        <!-- แบนเนอร์คำถามด้านบน (Top HUD) -->
+        <div class="absolute top-6 left-1/2 transform -translate-x-1/2 w-11/12 max-w-4xl holo-panel px-8 py-5 text-center flex flex-col items-center">
+            <div class="flex justify-between w-full text-sm font-semibold text-gray-400 mb-2 tracking-widest">
+                <span>ข้อที่ <span id="q-number" class="text-white">1</span>/5</span>
+                <span>คะแนน: <span id="score-display" class="text-yellow-400 font-bold text-lg">0</span></span>
+            </div>
+            <h2 id="question-text" class="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">กำลังโหลดคำถาม...</h2>
+        </div>
+
+        <!-- ตัวเลือก A (ซ้าย) -->
+        <div class="absolute top-1/2 left-8 md:left-16 transform -translate-y-1/2 animate-float">
+            <div id="card-a" class="holo-panel holo-panel-blue p-6 flex flex-col items-center w-64 md:w-80 transition-all duration-300">
+                <div class="bg-blue-600 text-white font-black text-2xl w-12 h-12 rounded-full flex items-center justify-center mb-3 shadow-[0_0_15px_#3b82f6]">A</div>
+                <p id="text-a" class="text-lg text-center font-medium mb-4 min-h-[60px] flex items-center">ตัวเลือก A</p>
+                
+                <div class="relative w-28 h-28">
+                    <svg class="progress-ring w-full h-full" width="112" height="112">
+                        <circle stroke="rgba(255,255,255,0.1)" stroke-width="8" fill="transparent" r="48" cx="56" cy="56"/>
+                        <circle id="progress-a" class="progress-ring__circle drop-shadow-[0_0_8px_#3b82f6]" stroke="#3b82f6" stroke-width="8" stroke-linecap="round" fill="transparent" r="48" cx="56" cy="56" stroke-dasharray="301.59" stroke-dashoffset="301.59"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center text-blue-400 font-bold text-xl drop-shadow-md" id="percent-a">0%</div>
+                </div>
+                <p class="text-xs text-blue-300 mt-3 animate-pulse">เอามือมาทาบเพื่อเลือก</p>
+            </div>
+        </div>
+
+        <!-- ตัวเลือก B (ขวา) -->
+        <div class="absolute top-1/2 right-8 md:right-16 transform -translate-y-1/2 animate-float" style="animation-delay: 1s;">
+            <div id="card-b" class="holo-panel holo-panel-red p-6 flex flex-col items-center w-64 md:w-80 transition-all duration-300">
+                <div class="bg-red-600 text-white font-black text-2xl w-12 h-12 rounded-full flex items-center justify-center mb-3 shadow-[0_0_15px_#ef4444]">B</div>
+                <p id="text-b" class="text-lg text-center font-medium mb-4 min-h-[60px] flex items-center">ตัวเลือก B</p>
+                
+                <div class="relative w-28 h-28">
+                    <svg class="progress-ring w-full h-full" width="112" height="112">
+                        <circle stroke="rgba(255,255,255,0.1)" stroke-width="8" fill="transparent" r="48" cx="56" cy="56"/>
+                        <circle id="progress-b" class="progress-ring__circle drop-shadow-[0_0_8px_#ef4444]" stroke="#ef4444" stroke-width="8" stroke-linecap="round" fill="transparent" r="48" cx="56" cy="56" stroke-dasharray="301.59" stroke-dashoffset="301.59"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center text-red-400 font-bold text-xl drop-shadow-md" id="percent-b">0%</div>
+                </div>
+                <p class="text-xs text-red-300 mt-3 animate-pulse">เอามือมาทาบเพื่อเลือก</p>
+            </div>
+        </div>
+        
+        <!-- ปุ่มเสียง -->
+        <button id="mute-btn" class="absolute bottom-6 right-6 pointer-events-auto holo-panel px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 transition-colors">
+            🔊 เปิดเสียง
+        </button>
+    </div>
+
+    <div id="start-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-950 bg-opacity-95 backdrop-blur-md transition-opacity duration-500">
+        <div class="holo-panel p-8 md:p-12 rounded-3xl text-center max-w-2xl w-11/12 border-t-4 border-blue-500 relative overflow-hidden">
+            <!-- เอฟเฟกต์ตกแต่ง -->
+            <div class="absolute -top-20 -left-20 w-40 h-40 bg-blue-600 rounded-full mix-blend-screen filter blur-[50px] opacity-50"></div>
+            <div class="absolute -bottom-20 -right-20 w-40 h-40 bg-red-600 rounded-full mix-blend-screen filter blur-[50px] opacity-50"></div>
+            
+            <h1 class="text-4xl md:text-6xl font-extrabold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-red-400 relative z-10 tracking-tight">
+                ANTI-CORRUPTION<br><span class="text-3xl text-white">เลือกฝั่ง ต้านโกง</span>
+            </h1>
+            
+            <div class="bg-black bg-opacity-50 p-6 rounded-2xl mb-8 text-left text-gray-200 text-sm md:text-base space-y-3 relative z-10 border border-gray-700">
+                <p class="flex items-center"><span class="text-2xl mr-3">📹</span> <strong>ตั้งกล้อง:</strong> ถอยห่างจากจอให้เห็นร่างกายช่วงบน (แขนและหัว)</p>
+                <p class="flex items-center"><span class="text-2xl mr-3">🖐️</span> <strong>วิธีเล่น:</strong> ขยับ "มือ" ของคุณไปทาบทับปุ่ม A หรือ B กลางอากาศ</p>
+                <p class="flex items-center"><span class="text-2xl mr-3">⏱️</span> <strong>การตอบ:</strong> ค้างมือไว้ในปุ่มจนแถบพลังโหลดเต็ม 100%</p>
+            </div>
+
+            <button id="start-btn" class="relative z-10 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 px-10 rounded-full text-xl md:text-2xl shadow-[0_0_20px_rgba(79,70,229,0.5)] hover:shadow-[0_0_30px_rgba(79,70,229,0.8)] transition-all transform hover:scale-105">
+                เริ่มเกมตอนนี้เลย!
+            </button>
+            <p id="loading-ai-text" class="mt-4 text-yellow-400 text-sm hidden font-medium animate-pulse relative z-10">กำลังโหลดระบบ AI กรุณารอสักครู่...</p>
+        </div>
+    </div>
+
+    <div id="feedback-screen" class="absolute inset-0 z-40 hidden flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-lg transition-opacity duration-300">
+        <div id="feedback-panel" class="holo-panel p-10 rounded-3xl text-center max-w-2xl w-11/12 transform scale-90 transition-transform duration-300">
+            <h2 id="feedback-result" class="text-5xl font-black mb-4 drop-shadow-lg">ถูกต้อง! 🎉</h2>
+            <div class="bg-gray-900 bg-opacity-80 p-6 rounded-2xl mb-6 border border-gray-700">
+                <p id="feedback-explanation" class="text-lg md:text-xl text-gray-200 leading-relaxed font-light">คำอธิบายเหตุผลจะแสดงที่นี่</p>
+            </div>
+            <p class="text-gray-400 text-sm tracking-widest uppercase">กำลังไปยังข้อถัดไป <span id="next-countdown" class="text-white font-bold text-lg mx-1">3</span></p>
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="absolute inset-0 z-50 hidden flex items-center justify-center bg-gray-950 bg-opacity-95 backdrop-blur-lg">
+        <div class="holo-panel p-10 rounded-3xl text-center max-w-2xl w-11/12 border-t-4 border-yellow-500">
+            <h1 class="text-4xl md:text-5xl font-extrabold mb-2 text-yellow-400 drop-shadow-[0_0_10px_#eab308]">สรุปผลภารกิจ!</h1>
+            <h2 class="text-xl mb-8 text-gray-300 font-light">คุณคือผู้พิทักษ์ความถูกต้องระดับไหน?</h2>
+            
+            <div class="mb-8">
+                <p class="text-gray-400 text-sm mb-1 uppercase tracking-widest">คะแนนรวม</p>
+                <p class="text-7xl font-black text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]" id="final-score">0</p>
+            </div>
+
+            <div class="bg-gray-900 p-6 rounded-2xl mb-8 border border-gray-700">
+                <h3 class="text-2xl font-bold text-blue-400 mb-2" id="rank-title">ระดับ: มือใหม่หัดต้านโกง</h3>
+                <p class="text-gray-300 text-sm md:text-base" id="rank-desc">ทำได้ดี! แต่ยังต้องฝึกการตัดสินใจเพื่อความถูกต้องให้แม่นยำกว่านี้</p>
+            </div>
+
+            <button id="restart-btn" class="bg-gradient-to-r from-green-600 to-teal-500 hover:from-green-500 hover:to-teal-400 text-white font-bold py-3 px-10 rounded-full text-xl shadow-[0_0_15px_rgba(20,184,166,0.5)] transition-all transform hover:scale-105">
+                เล่นอีกครั้ง 🔄
+            </button>
+        </div>
+    </div>
+
+    <script>
+        class SoundEngine {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.isMuted = false;
+            }
+
+            toggleMute() {
+                this.isMuted = !this.isMuted;
+                return this.isMuted;
+            }
+
+            playTone(freq, type, duration, vol = 0.1) {
+                if (this.isMuted) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            playHoverTick() { this.playTone(800, 'sine', 0.05, 0.05); }
+            playLock() { 
+                this.playTone(1000, 'square', 0.1, 0.1); 
+                setTimeout(() => this.playTone(1500, 'square', 0.2, 0.1), 100);
+            }
+            playCorrect() {
+                if (this.isMuted) return;
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.1), i * 80);
+                });
+            }
+            playIncorrect() {
+                if (this.isMuted) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(100, this.ctx.currentTime + 0.4);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.4);
+            }
+            playGameOver() {
+                if (this.isMuted) return;
+                [440, 554.37, 659.25, 880].forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'sine', 0.8, 0.15), i * 150);
+                });
+            }
+        }
+
+        const sound = new SoundEngine();
+
+        const scenarios = [
+            { q: "เจอเพื่อนกำลังลอกข้อสอบ", a: "ทำเป็นไม่เห็น", b: "บอกครูคุมสอบ", correct: 'b', exp: "การเพิกเฉยคือการส่งเสริมคนผิด การแจ้งครูคือความกล้าหาญที่ถูกต้อง" },
+            { q: "มีคนเนียนแทรกคิวซื้ออาหาร", a: "เตือนให้ต่อคิว", b: "ปล่อยไปไม่อยากมีเรื่อง", correct: 'a', exp: "การรักษาสิทธิ์เป็นพื้นฐานของความยุติธรรม ทุกคนต้องเคารพกฎเดียวกัน" },
+            { q: "แม่ค้าทอนเงินเกินมา 100 บาท", a: "เดินหนีถือว่าโชคดี", b: "คืนเงินส่วนที่เกิน", correct: 'b', exp: "ความซื่อสัตย์เริ่มจากตัวเรา การเอาเปรียบแม้เล็กน้อยก็คือการทุจริต" },
+            { q: "ทำงานกลุ่ม เพื่อนไม่ยอมช่วย", a: "ใส่ชื่อไป สงสารเพื่อน", b: "แจ้งครูตามจริง", correct: 'b', exp: "ความโปร่งใสสำคัญ การให้คะแนนคนไม่ทำงานคือการสนับสนุนความไม่ยุติธรรม" },
+            { q: "หัวหน้าเอาเงินห้องไปใช้ส่วนตัว", a: "ท้วงติงให้คืนเงิน", b: "ช่างเถอะ เงินนิดเดียว", correct: 'a', exp: "การยักยอกทรัพย์ส่วนรวมไม่ว่าจะเท่าใดก็คือทุจริต ต้องกล้าตรวจสอบ" }
+        ];
+
+        const STATE = { INIT: 'INIT', READY: 'READY', PLAYING: 'PLAYING', FEEDBACK: 'FEEDBACK', GAME_OVER: 'GAME_OVER' };
+        let currentState = STATE.INIT;
+        let currentQuestionIdx = 0;
+        let score = 0;
+        
+        const HOVER_TIME_REQUIRED = 1200; // ลดลงเหลือ 1.2 วิให้เกมไวขึ้น
+        let hoverSide = null;
+        let hoverStartTime = 0;
+        let hoverProgress = 0;
+
+        // UI Variables
+        const startBtn = document.getElementById('start-btn');
+        const loadingText = document.getElementById('loading-ai-text');
+        const muteBtn = document.getElementById('mute-btn');
+        
+        const cardA = document.getElementById('card-a');
+        const cardB = document.getElementById('card-b');
+        const overlay = document.getElementById('target-glow-overlay');
+        
+        const circleA = document.getElementById('progress-a');
+        const circleB = document.getElementById('progress-b');
+        const percentA = document.getElementById('percent-a');
+        const percentB = document.getElementById('percent-b');
+        const CIRCUMFERENCE = 301.59; // 2 * pi * 48
+
+        const canvasElement = document.getElementById('output-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+
+        function resizeCanvas() {
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        muteBtn.addEventListener('click', () => {
+            const muted = sound.toggleMute();
+            muteBtn.innerText = muted ? '🔇 ปิดเสียง' : '🔊 เปิดเสียง';
+            muteBtn.classList.toggle('text-red-400', muted);
+        });
+
+        const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`});
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
+        pose.onResults(onResults);
+
+        const camera = new Camera(document.getElementById('video-element'), {
+            onFrame: async () => { await pose.send({image: document.getElementById('video-element')}); },
+            width: 1280, height: 720
+        });
+
+        function onResults(results) {
+            if (currentState === STATE.INIT) {
+                currentState = STATE.READY;
+                loadingText.classList.add('hidden');
+                startBtn.disabled = false;
+                startBtn.innerText = "เริ่มเกมตอนนี้เลย!";
+            }
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // วาดวิดีโอกลับด้าน (Mirror)
+            canvasCtx.translate(canvasElement.width, 0);
+            canvasCtx.scale(-1, 1);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.poseLandmarks) {
+                // วาดโครงกระดูกแบบ Neon
+                canvasCtx.globalCompositeOperation = 'lighter';
+                
+                // วาดเส้นเชื่อม
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
+                    color: 'rgba(0, 255, 255, 0.4)', lineWidth: 3 
+                });
+                // วาดจุดข้อต่อทั่วไป
+                drawLandmarks(canvasCtx, results.poseLandmarks, {
+                    color: 'rgba(255, 0, 255, 0.6)', lineWidth: 1, radius: 2 
+                });
+
+                // ดึงพิกัดข้อมือซ้าย (15) และขวา (16)
+                const leftWrist = results.poseLandmarks[15];
+                const rightWrist = results.poseLandmarks[16];
+
+                // วาด Cursor แบบมีแสงออร่าที่ข้อมือ เพื่อให้ผู้เล่นรู้ว่าใช้อะไรเลือก!
+                [leftWrist, rightWrist].forEach(wrist => {
+                    if (wrist.visibility > 0.6) {
+                        const x = wrist.x * canvasElement.width;
+                        const y = wrist.y * canvasElement.height;
+                        
+                        // วงกลมด้านใน
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(x, y, 15, 0, 2 * Math.PI);
+                        canvasCtx.fillStyle = '#ffffff';
+                        canvasCtx.fill();
+                        
+                        // วงกลมแสงออร่าด้านนอก
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(x, y, 30, 0, 2 * Math.PI);
+                        canvasCtx.fillStyle = 'rgba(0, 255, 255, 0.4)';
+                        canvasCtx.fill();
+                    }
+                });
+                
+                if (currentState === STATE.PLAYING) {
+                    processGameplay(results.poseLandmarks);
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        function processGameplay(landmarks) {
+            // หน้าจอแบ่งเป็น 3 ส่วน ซ้าย(A), กลาง, ขวา(B)
+            // เนื่องจากเรากลับด้านจอ ค่าแกน X บนจอ = 1.0 - landmark.x กายภาพ
+            const getScreenX = (lm) => 1.0 - lm.x;
+            const getScreenY = (lm) => lm.y; // Y เหมือนเดิม
+
+            let inZoneA = false;
+            let inZoneB = false;
+
+            // เช็คว่า ข้อมือซ้าย หรือ ข้อมือขวา อยู่ในโซนปุ่มหรือไม่
+            // ปุ่ม A อยู่ฝั่งซ้าย (X < 0.35), ปุ่ม B อยู่ฝั่งขวา (X > 0.65)
+            // เช็คความสูง (Y) ให้อยู่ช่วงกลางๆ ถึงบน (0.1 ถึง 0.8) เพื่อป้องกันมือตกแล้วโดน
+            const wrists = [landmarks[15], landmarks[16]];
+            
+            wrists.forEach(w => {
+                if (w.visibility > 0.5) {
+                    let sx = getScreenX(w);
+                    let sy = getScreenY(w);
+                    
+                    if (sy > 0.1 && sy < 0.8) {
+                        if (sx < 0.35) inZoneA = true;
+                        if (sx > 0.65) inZoneB = true;
+                    }
+                }
+            });
+
+            const now = performance.now();
+
+            if (inZoneA && !inZoneB) updateHoverProgress('a', now);
+            else if (inZoneB && !inZoneA) updateHoverProgress('b', now);
+            else resetHoverProgress();
+        }
+
+        function updateHoverProgress(side, now) {
+            if (hoverSide !== side) {
+                hoverSide = side;
+                hoverStartTime = now;
+                
+                // ใส่คลาสให้ Overlay กระพริบตามฝั่ง
+                overlay.className = `absolute inset-0 pointer-events-none transition-all duration-300 targeting-${side}`;
+                if(side === 'a') {
+                    cardA.classList.add('scale-110', 'shadow-[0_0_40px_rgba(59,130,246,0.6)]');
+                    cardA.classList.remove('holo-panel-blue');
+                    cardA.style.borderColor = '#3b82f6';
+                } else {
+                    cardB.classList.add('scale-110', 'shadow-[0_0_40px_rgba(239,68,68,0.6)]');
+                    cardB.classList.remove('holo-panel-red');
+                    cardB.style.borderColor = '#ef4444';
+                }
+            }
+
+            const elapsed = now - hoverStartTime;
+            hoverProgress = Math.min((elapsed / HOVER_TIME_REQUIRED) * 100, 100);
+            
+            updateCircleUI(side, hoverProgress);
+
+            if (hoverProgress > 0 && hoverProgress % 25 < 3) sound.playHoverTick();
+
+            if (hoverProgress >= 100) {
+                sound.playLock();
+                handleSelection(side);
+            }
+        }
+
+        function resetHoverProgress() {
+            if (hoverSide !== null) {
+                hoverSide = null;
+                hoverProgress = 0;
+                
+                overlay.className = 'absolute inset-0 pointer-events-none transition-all duration-300';
+                cardA.classList.remove('scale-110', 'shadow-[0_0_40px_rgba(59,130,246,0.6)]');
+                cardB.classList.remove('scale-110', 'shadow-[0_0_40px_rgba(239,68,68,0.6)]');
+                cardA.classList.add('holo-panel-blue');
+                cardB.classList.add('holo-panel-red');
+                cardA.style.borderColor = '';
+                cardB.style.borderColor = '';
+                
+                updateCircleUI('a', 0);
+                updateCircleUI('b', 0);
+            }
+        }
+
+        function updateCircleUI(side, percent) {
+            const offset = CIRCUMFERENCE - (percent / 100) * CIRCUMFERENCE;
+            if (side === 'a') {
+                circleA.style.strokeDashoffset = offset;
+                percentA.innerText = Math.floor(percent) + '%';
+                circleB.style.strokeDashoffset = CIRCUMFERENCE;
+                percentB.innerText = '0%';
+            } else {
+                circleB.style.strokeDashoffset = offset;
+                percentB.innerText = Math.floor(percent) + '%';
+                circleA.style.strokeDashoffset = CIRCUMFERENCE;
+                percentA.innerText = '0%';
+            }
+        }
+
+        function loadQuestion() {
+            if (currentQuestionIdx >= scenarios.length) {
+                showGameOver();
+                return;
+            }
+            const q = scenarios[currentQuestionIdx];
+            document.getElementById('q-number').innerText = currentQuestionIdx + 1;
+            document.getElementById('question-text').innerText = q.q;
+            document.getElementById('text-a').innerText = q.a;
+            document.getElementById('text-b').innerText = q.b;
+            
+            resetHoverProgress();
+            document.getElementById('play-ui').classList.remove('hidden');
+            currentState = STATE.PLAYING;
+        }
+
+        function handleSelection(selectedSide) {
+            currentState = STATE.FEEDBACK;
+            const q = scenarios[currentQuestionIdx];
+            const isCorrect = selectedSide === q.correct;
+            
+            document.getElementById('play-ui').classList.add('hidden');
+            resetHoverProgress(); // เคลียร์แสงเอฟเฟกต์
+            
+            const fbScreen = document.getElementById('feedback-screen');
+            const fbResult = document.getElementById('feedback-result');
+            const fbExp = document.getElementById('feedback-explanation');
+            const fbPanel = document.getElementById('feedback-panel');
+            
+            fbScreen.classList.remove('hidden');
+            setTimeout(() => fbPanel.classList.remove('scale-90'), 50);
+
+            if (isCorrect) {
+                sound.playCorrect();
+                score += 100;
+                document.getElementById('score-display').innerText = score;
+                fbResult.innerHTML = "✅ ถูกต้องยอดเยี่ยม!";
+                fbResult.className = "text-4xl md:text-5xl font-black mb-4 text-green-400 drop-shadow-[0_0_15px_rgba(74,222,128,0.5)]";
+            } else {
+                sound.playIncorrect();
+                fbResult.innerHTML = "❌ ยังไม่ถูกนะ";
+                fbResult.className = "text-4xl md:text-5xl font-black mb-4 text-red-400 drop-shadow-[0_0_15px_rgba(248,113,113,0.5)]";
+            }
+            fbExp.innerText = q.exp;
+
+            let countdown = 4;
+            const cdText = document.getElementById('next-countdown');
+            cdText.innerText = countdown;
+            
+            const timer = setInterval(() => {
+                countdown--;
+                cdText.innerText = countdown;
+                if (countdown <= 0) {
+                    clearInterval(timer);
+                    fbPanel.classList.add('scale-90');
+                    setTimeout(() => {
+                        fbScreen.classList.add('hidden');
+                        currentQuestionIdx++;
+                        loadQuestion();
+                    }, 300);
+                }
+            }, 1000);
+        }
+
+        function showGameOver() {
+            currentState = STATE.GAME_OVER;
+            sound.playGameOver();
+            document.getElementById('play-ui').classList.add('hidden');
+            
+            const goScreen = document.getElementById('game-over-screen');
+            goScreen.classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+            
+            const maxScore = scenarios.length * 100;
+            const rankTitle = document.getElementById('rank-title');
+            const rankDesc = document.getElementById('rank-desc');
+            
+            if (score === maxScore) {
+                rankTitle.innerText = "🏆 ระดับ: ฮีโร่ต้านโกงตัวจริง!";
+                rankTitle.className = "text-3xl font-bold text-yellow-400 mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]";
+                rankDesc.innerText = "สมบูรณ์แบบ! คุณมีความซื่อสัตย์และกล้าหาญในการต่อต้านคอร์รัปชันอย่างแท้จริง เป็นแบบอย่างที่ดีมาก";
+            } else if (score >= maxScore * 0.6) {
+                rankTitle.innerText = "⭐ ระดับ: พลเมืองดีศรีสังคม";
+                rankTitle.className = "text-2xl font-bold text-blue-400 mb-2";
+                rankDesc.innerText = "ทำได้ดีมาก! คุณมีจิตสำนึกที่ดี แต่อาจมีบางสถานการณ์ที่ต้องตัดสินใจให้เด็ดขาดขึ้นอีกนิด";
+            } else {
+                rankTitle.innerText = "🌱 ระดับ: ผู้เริ่มต้นเรียนรู้ต้านโกง";
+                rankTitle.className = "text-2xl font-bold text-green-400 mb-2";
+                rankDesc.innerText = "ไม่เป็นไร! การเรียนรู้เรื่องนี้ต้องใช้เวลา ลองทบทวนเหตุผลในแต่ละข้อแล้วกลับมาท้าทายใหม่นะ";
+            }
+        }
+
+        startBtn.addEventListener('click', () => {
+            if (currentState === STATE.INIT) {
+                startBtn.disabled = true;
+                startBtn.innerText = "กำลังเชื่อมต่อกล้อง...";
+                sound.ctx.resume();
+                camera.start();
+            } else if (currentState === STATE.READY) {
+                document.getElementById('start-screen').classList.add('opacity-0');
+                sound.ctx.resume();
+                setTimeout(() => {
+                    document.getElementById('start-screen').classList.add('hidden');
+                    loadQuestion();
+                }, 500);
+            }
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            currentQuestionIdx = 0;
+            score = 0;
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('game-over-screen').classList.add('hidden');
+            loadQuestion();
+        });
+
+        // เปิดกล้องเตรียมรอไว้เลย
+        camera.start();
+    </script>
+</body>
+</html>
