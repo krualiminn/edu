@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>อ่านสนุก ปลุกความคิด - ร.ร.บ้านเจ๊ะยอ</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Google Fonts: Sarabun -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Sarabun', 'sans-serif'] },
+                    colors: {
+                        primary: '#1e40af', // blue-800
+                        secondary: '#3b82f6', // blue-500
+                        accent: '#f59e0b', // amber-500
+                        danger: '#ef4444', // red-500
+                        success: '#10b981', // emerald-500
+                        dark: '#1e293b', // slate-800
+                        light: '#f8fafc', // slate-50
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background-color: #f1f5f9; color: #334155; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Smooth Transitions */
+        .view-section { transition: opacity 0.3s ease-in-out; }
+        .hide { display: none !important; opacity: 0; }
+        
+        /* Sidebar Styling */
+        .sidebar-item { 
+            position: relative; transition: all 0.2s; 
+            border-left: 4px solid transparent;
+        }
+        .sidebar-item:hover { background-color: #eff6ff; color: #1e40af; }
+        .sidebar-item.active { 
+            background-color: #eff6ff; 
+            color: #1e40af; 
+            font-weight: 600;
+            border-left-color: #3b82f6;
+        }
+        
+        /* Cards */
+        .glass-card { 
+            background: #ffffff; 
+            border: 1px solid #e2e8f0; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .glass-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+            transform: translateY(-2px);
+        }
+
+        /* Loading Spinner */
+        .loader {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Table enhancements */
+        th { font-weight: 600; letter-spacing: 0.025em; }
+        tbody tr { transition: background-color 0.15s; }
+        tbody tr:hover { background-color: #f8fafc; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden antialiased">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-xl flex-shrink-0 flex flex-col h-full z-30 fixed md:relative transform -translate-x-full md:translate-x-0 transition-transform duration-300" id="sidebar">
+        <!-- Logo Area -->
+        <div class="p-6 border-b border-gray-100 flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white relative">
+            <button class="md:hidden absolute top-4 right-4 text-gray-400 hover:text-gray-600" onclick="toggleSidebar()">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            <div class="w-16 h-16 bg-gradient-to-tr from-primary to-secondary rounded-2xl flex items-center justify-center text-white text-3xl mb-3 shadow-lg shadow-blue-200 transform rotate-3">
+                <i class="fa-solid fa-book-open-reader -rotate-3"></i>
+            </div>
+            <h1 class="text-lg font-bold text-center text-dark tracking-tight leading-tight">อ่านสนุก ปลุกความคิด</h1>
+            <p class="text-xs text-secondary font-medium mt-1">ร.ร.บ้านเจ๊ะยอ • ปี 2569</p>
+        </div>
+        
+        <!-- Navigation -->
+        <nav class="flex-1 overflow-y-auto py-4">
+            <div class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">เมนูหลัก</div>
+            <ul class="space-y-1 mb-6">
+                <li><button onclick="switchView('dashboard')" id="nav-dashboard" class="sidebar-item active w-full text-left px-6 py-3 text-gray-600 flex items-center"><i class="fa-solid fa-chart-pie w-6 opacity-75"></i> ภาพรวม (Dashboard)</button></li>
+                <li><button onclick="switchView('students')" id="nav-students" class="sidebar-item w-full text-left px-6 py-3 text-gray-600 flex items-center"><i class="fa-solid fa-users w-6 opacity-75"></i> ข้อมูลนักเรียนทั้งหมด</button></li>
+            </ul>
+
+            <div class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">วิเคราะห์เจาะลึก</div>
+            <ul class="space-y-1 mb-6">
+                <li><button onclick="switchView('analysis-thai')" id="nav-analysis-thai" class="sidebar-item w-full text-left px-6 py-3 text-gray-600 flex items-center"><i class="fa-solid fa-book w-6 opacity-75 text-green-500"></i> วิชาภาษาไทย</button></li>
+                <li><button onclick="switchView('analysis-math')" id="nav-analysis-math" class="sidebar-item w-full text-left px-6 py-3 text-gray-600 flex items-center"><i class="fa-solid fa-calculator w-6 opacity-75 text-purple-500"></i> วิชาคณิตศาสตร์</button></li>
+                <li><button onclick="switchView('comparison')" id="nav-comparison" class="sidebar-item w-full text-left px-6 py-3 text-gray-600 flex items-center"><i class="fa-solid fa-scale-balanced w-6 opacity-75 text-blue-500"></i> เปรียบเทียบผล</button></li>
+            </ul>
+
+            <div class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">ติดตามพิเศษ</div>
+            <ul class="space-y-1">
+                <li>
+                    <button onclick="switchView('needs-improvement')" id="nav-needs-improvement" class="sidebar-item w-full text-left px-6 py-3 text-red-600 hover:bg-red-50 hover:text-red-700 flex items-center group">
+                        <i class="fa-solid fa-heart-pulse w-6 group-hover:animate-pulse"></i> กลุ่มต้องพัฒนา 
+                        <span id="alert-badge" class="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full hidden shadow-sm">0</span>
+                    </button>
+                </li>
+                <li><button onclick="switchView('report')" id="nav-report" class="sidebar-item w-full text-left px-6 py-3 text-gray-600 flex items-center"><i class="fa-solid fa-file-invoice w-6 opacity-75 text-amber-500"></i> รายงานสรุป (Report)</button></li>
+            </ul>
+        </nav>
+        
+        <!-- Footer -->
+        <div class="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-center gap-2">
+            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span class="text-[10px] text-gray-500 font-medium uppercase tracking-wider">เชื่อมต่อฐานข้อมูลแล้ว</span>
+        </div>
+    </aside>
+
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-gray-800 bg-opacity-50 z-20 hidden md:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full relative w-full overflow-hidden">
+        
+        <!-- Top Header -->
+        <header class="bg-white/80 backdrop-blur-md border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-10">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="md:hidden text-gray-500 hover:text-primary transition p-2 rounded-lg hover:bg-gray-100">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <div class="hidden sm:block">
+                    <h2 class="text-sm font-bold text-dark">ระบบติดตามผลประเมิน</h2>
+                    <p class="text-[10px] text-gray-400" id="last-update-text">กำลังซิงค์ข้อมูล...</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <div class="text-right hidden sm:block mr-2">
+                    <p class="text-xs font-bold text-dark">ผู้ดูแลระบบ</p>
+                    <p class="text-[10px] text-gray-500">โรงเรียนบ้านเจ๊ะยอ</p>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center border-2 border-white shadow-md">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+            </div>
+        </header>
+
+        <!-- Alert Banner -->
+        <div id="data-source-alert" class="bg-amber-50 border-l-4 border-amber-500 p-3 hidden shadow-sm">
+            <div class="flex items-start">
+                <div class="flex-shrink-0"><i class="fa-solid fa-triangle-exclamation text-amber-500"></i></div>
+                <div class="ml-3">
+                    <p class="text-sm text-amber-700">
+                        <strong>โหมดข้อมูลจำลอง:</strong> ไม่สามารถเชื่อมต่อ Google Sheets ได้ (อาจไม่ได้แชร์สาธารณะ) <br>
+                        <span class="text-xs">กำลังแสดงข้อมูลจำลอง 60 คน เพื่อสาธิตการทำงานของระบบ</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scrollable Content Area -->
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 relative" id="main-scroll-area">
+            
+            <!-- Loading State -->
+            <div id="loading-state" class="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+                <div class="loader mb-4"></div>
+                <p class="text-gray-500 font-medium animate-pulse">กำลังประมวลผลข้อมูลนักเรียน...</p>
+            </div>
+
+            <!-- VIEW: Dashboard -->
+            <section id="view-dashboard" class="view-section hide">
+                <div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-extrabold text-dark tracking-tight">Executive Dashboard</h2>
+                        <p class="text-gray-500 text-sm mt-1">สรุปผลสัมฤทธิ์ ป.1 - ป.3 ปีการศึกษา 2569</p>
+                    </div>
+                    <button onclick="fetchData()" class="text-xs bg-white border border-gray-200 text-gray-600 hover:text-primary hover:border-primary px-3 py-1.5 rounded-lg shadow-sm transition flex items-center gap-2">
+                        <i class="fa-solid fa-rotate-right"></i> รีเฟรชข้อมูล
+                    </button>
+                </div>
+
+                <!-- KPI Quick Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass-card rounded-2xl p-4 md:p-5 border-t-4 border-t-blue-500 relative overflow-hidden group">
+                        <div class="absolute top-0 right-0 -mt-4 -mr-4 w-16 h-16 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500"></div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">นร. ทั้งหมด (คน)</p>
+                        <div class="flex items-end gap-2">
+                            <h3 class="text-3xl md:text-4xl font-black text-dark" id="kpi-total">0</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card rounded-2xl p-4 md:p-5 border-t-4 border-t-green-500 relative overflow-hidden group">
+                        <div class="absolute top-0 right-0 -mt-4 -mr-4 w-16 h-16 bg-green-500/10 rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">เฉลี่ยภาษาไทย</p>
+                        <div class="flex items-end gap-2">
+                            <h3 class="text-3xl md:text-4xl font-black text-dark" id="kpi-thai-avg">0</h3>
+                            <span class="text-sm text-green-500 font-bold mb-1">/100</span>
+                        </div>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-4 md:p-5 border-t-4 border-t-purple-500 relative overflow-hidden group">
+                        <div class="absolute top-0 right-0 -mt-4 -mr-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">เฉลี่ยคณิตศาสตร์</p>
+                        <div class="flex items-end gap-2">
+                            <h3 class="text-3xl md:text-4xl font-black text-dark" id="kpi-math-avg">0</h3>
+                            <span class="text-sm text-purple-500 font-bold mb-1">/100</span>
+                        </div>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-4 md:p-5 border-t-4 border-t-red-500 relative overflow-hidden group cursor-pointer hover:bg-red-50" onclick="switchView('needs-improvement')">
+                        <div class="absolute top-0 right-0 -mt-4 -mr-4 w-16 h-16 bg-red-500/10 rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
+                        <p class="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">กลุ่มต้องพัฒนา (คน)</p>
+                        <div class="flex items-end justify-between">
+                            <h3 class="text-3xl md:text-4xl font-black text-red-600" id="kpi-risk">0</h3>
+                            <div class="w-8 h-8 rounded-full bg-red-100 text-red-500 flex items-center justify-center animate-pulse"><i class="fa-solid fa-arrow-right"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Insights Banner -->
+                <div class="bg-gradient-to-r from-blue-900 to-primary text-white rounded-2xl p-5 mb-6 shadow-lg relative overflow-hidden">
+                    <div class="absolute top-0 right-0 opacity-10 transform scale-150 translate-x-10 -translate-y-10">
+                        <i class="fa-solid fa-microchip text-9xl"></i>
+                    </div>
+                    <div class="relative z-10">
+                        <div class="flex items-center gap-2 mb-2">
+                            <i class="fa-solid fa-sparkles text-amber-300"></i>
+                            <h3 class="text-sm font-bold text-blue-100 uppercase tracking-wider">ระบบวิเคราะห์อัตโนมัติ (AI Insight)</h3>
+                        </div>
+                        <p class="text-lg font-medium leading-relaxed" id="dashboard-insight-text">กำลังวิเคราะห์ข้อมูลภาพรวม...</p>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <!-- Main Bar Chart -->
+                    <div class="lg:col-span-2 glass-card rounded-2xl p-5 flex flex-col">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-base font-bold text-dark">เปรียบเทียบคะแนนเฉลี่ยรายชั้น</h3>
+                        </div>
+                        <div class="flex-1 relative min-h-[250px]">
+                            <canvas id="chartDashboardBar"></canvas>
+                        </div>
+                    </div>
+                    <!-- Doughnut Status -->
+                    <div class="glass-card rounded-2xl p-5 flex flex-col">
+                        <h3 class="text-base font-bold text-dark mb-2 text-center">สัดส่วนคุณภาพนักเรียน (รวม)</h3>
+                        <div class="flex-1 relative flex items-center justify-center min-h-[200px]">
+                            <canvas id="chartDashboardDonut"></canvas>
+                            <!-- Center Text -->
+                            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <span class="text-3xl font-black text-dark" id="donut-center-total">0</span>
+                                <span class="text-[10px] text-gray-400 font-bold uppercase">คน</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: Students Data -->
+            <section id="view-students" class="view-section hide">
+                <div class="mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-dark tracking-tight">ฐานข้อมูลนักเรียน</h2>
+                        <p class="text-gray-500 text-sm mt-1">ข้อมูลดิบจาก Sheet: DATA</p>
+                    </div>
+                    
+                    <!-- Filters -->
+                    <div class="flex flex-wrap gap-2 w-full lg:w-auto">
+                        <div class="relative flex-1 lg:w-64">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+                            <input type="text" id="search-input" placeholder="ค้นหาชื่อ หรือ รหัส..." class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition shadow-sm">
+                        </div>
+                        <select id="filter-class-select" class="py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm bg-white cursor-pointer">
+                            <option value="all">ทุกระดับชั้น</option>
+                            <option value="ป.1">ป.1</option>
+                            <option value="ป.2">ป.2</option>
+                            <option value="ป.3">ป.3</option>
+                        </select>
+                        <select id="filter-status-select" class="py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm bg-white cursor-pointer">
+                            <option value="all">ทุกสถานะ</option>
+                            <option value="excellent">ดีเยี่ยม (80+)</option>
+                            <option value="pass">ผ่านเกณฑ์ (50-79)</option>
+                            <option value="fail">ต้องพัฒนา (<50)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200 text-gray-500 text-xs uppercase tracking-wider">
+                                    <th class="p-4 font-semibold">รหัส</th>
+                                    <th class="p-4 font-semibold">ชื่อ-นามสกุล</th>
+                                    <th class="p-4 font-semibold text-center">ระดับชั้น</th>
+                                    <th class="p-4 font-semibold text-center group cursor-pointer" onclick="sortTable('thai')">
+                                        ภาษาไทย <i class="fa-solid fa-sort ml-1 opacity-50 group-hover:opacity-100"></i>
+                                    </th>
+                                    <th class="p-4 font-semibold text-center group cursor-pointer" onclick="sortTable('math')">
+                                        คณิตศาสตร์ <i class="fa-solid fa-sort ml-1 opacity-50 group-hover:opacity-100"></i>
+                                    </th>
+                                    <th class="p-4 font-semibold text-center group cursor-pointer text-primary" onclick="sortTable('avg')">
+                                        เฉลี่ยรวม <i class="fa-solid fa-sort ml-1 opacity-50 group-hover:opacity-100"></i>
+                                    </th>
+                                    <th class="p-4 font-semibold text-center">ประเมินผล</th>
+                                </tr>
+                            </thead>
+                            <tbody id="students-tbody" class="text-sm">
+                                <!-- Data rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Pagination / Footer Info -->
+                    <div class="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center text-xs text-gray-500">
+                        <span id="table-showing-info">แสดง 0 รายการ</span>
+                        <div class="flex gap-1" id="pagination-controls">
+                            <!-- Pagination buttons could go here for large datasets -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: Analysis - Thai -->
+            <section id="view-analysis-thai" class="view-section hide">
+                <div class="mb-6 flex items-center gap-3">
+                    <div class="w-10 h-10 bg-green-100 text-green-600 rounded-lg flex items-center justify-center text-xl shadow-sm"><i class="fa-solid fa-book"></i></div>
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-dark">วิเคราะห์เจาะลึก: ภาษาไทย</h2>
+                        <p class="text-gray-500 text-sm">ประสิทธิภาพการเรียนรู้ด้านภาษาและการอ่าน</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="glass-card p-5 rounded-2xl flex flex-col justify-center items-center text-center">
+                        <p class="text-sm text-gray-500 font-medium mb-1">คะแนนเฉลี่ยรวม</p>
+                        <h3 class="text-4xl font-black text-green-600" id="thai-overall-avg">0</h3>
+                    </div>
+                    <div class="glass-card p-5 rounded-2xl md:col-span-2">
+                        <h4 class="text-sm font-bold text-gray-700 mb-3">แนวโน้มระดับชั้น</h4>
+                        <div class="h-32"><canvas id="chartThaiTrend"></canvas></div>
+                    </div>
+                </div>
+
+                <h3 class="text-lg font-bold text-dark mb-4 mt-8">สรุปรายชั้นเรียน (ภาษาไทย)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="thai-class-cards">
+                    <!-- Injected via JS -->
+                </div>
+            </section>
+
+            <!-- VIEW: Analysis - Math -->
+            <section id="view-analysis-math" class="view-section hide">
+                <div class="mb-6 flex items-center gap-3">
+                    <div class="w-10 h-10 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center text-xl shadow-sm"><i class="fa-solid fa-calculator"></i></div>
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-dark">วิเคราะห์เจาะลึก: คณิตศาสตร์</h2>
+                        <p class="text-gray-500 text-sm">ประสิทธิภาพการเรียนรู้ด้านการคำนวณและตรรกะ</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="glass-card p-5 rounded-2xl flex flex-col justify-center items-center text-center">
+                        <p class="text-sm text-gray-500 font-medium mb-1">คะแนนเฉลี่ยรวม</p>
+                        <h3 class="text-4xl font-black text-purple-600" id="math-overall-avg">0</h3>
+                    </div>
+                    <div class="glass-card p-5 rounded-2xl md:col-span-2">
+                        <h4 class="text-sm font-bold text-gray-700 mb-3">แนวโน้มระดับชั้น</h4>
+                        <div class="h-32"><canvas id="chartMathTrend"></canvas></div>
+                    </div>
+                </div>
+
+                <h3 class="text-lg font-bold text-dark mb-4 mt-8">สรุปรายชั้นเรียน (คณิตศาสตร์)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="math-class-cards">
+                    <!-- Injected via JS -->
+                </div>
+            </section>
+
+            <!-- VIEW: Comparison -->
+            <section id="view-comparison" class="view-section hide">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-extrabold text-dark">เปรียบเทียบผลสัมฤทธิ์</h2>
+                    <p class="text-gray-500 text-sm">เทียบความสมดุลระหว่างวิชา และประสิทธิภาพแต่ละชั้น</p>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="glass-card p-6 rounded-2xl">
+                        <h3 class="text-center font-bold text-gray-700 mb-4">ความสมดุลรายชั้น (Radar)</h3>
+                        <div class="relative h-64 flex justify-center"><canvas id="chartRadarComparison"></canvas></div>
+                    </div>
+                    <div class="glass-card p-6 rounded-2xl flex flex-col justify-center">
+                        <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">ข้อสังเกตความต่าง (Gap Analysis)</h3>
+                        <ul class="space-y-4" id="gap-analysis-list">
+                            <!-- Injected via JS -->
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: Needs Improvement (CRITICAL) -->
+            <section id="view-needs-improvement" class="view-section hide">
+                <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-red-100 pb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center text-white text-xl shadow-md shadow-red-200">
+                            <i class="fa-solid fa-user-injured"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-extrabold text-red-700">กลุ่มต้องพัฒนาเร่งด่วน</h2>
+                            <p class="text-red-400 text-sm font-medium">คะแนนเฉลี่ยหรือวิชาใดวิชาหนึ่ง < 50 คะแนน</p>
+                        </div>
+                    </div>
+                    <button onclick="window.print()" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-2">
+                        <i class="fa-solid fa-print"></i> พิมพ์รายชื่อ
+                    </button>
+                </div>
+
+                <!-- Action Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-red-50 p-4 rounded-xl border border-red-100">
+                        <div class="flex items-center gap-2 text-red-800 font-bold mb-2"><i class="fa-solid fa-bullseye"></i> เป้าหมาย</div>
+                        <p class="text-xs text-red-700">ระบุตัวนักเรียนที่มีความเสี่ยงด้านวิชาการ เพื่อจัดทำแผนสอนซ่อมเสริม (Remedial) เฉพาะบุคคล</p>
+                    </div>
+                    <div class="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                        <div class="flex items-center gap-2 text-amber-800 font-bold mb-2"><i class="fa-solid fa-comments"></i> แนวทาง</div>
+                        <p class="text-xs text-amber-700">พูดคุยกับครูประจำชั้น หาสาเหตุ (การอ่านไม่ออก, ขาดสมาธิ, ปัญหาครอบครัว) เพื่อแก้ปัญหาให้ตรงจุด</p>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                        <div class="flex items-center gap-2 text-blue-800 font-bold mb-2"><i class="fa-solid fa-handshake"></i> การติดตาม</div>
+                        <p class="text-xs text-blue-700">ประเมินผลซ้ำทุก 2 สัปดาห์ และรายงานความก้าวหน้าให้ผู้ปกครองทราบ</p>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-2xl overflow-hidden border-2 border-red-100 shadow-sm shadow-red-50">
+                     <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-red-50 border-b border-red-100 text-red-700 text-xs uppercase tracking-wider">
+                                    <th class="p-4 font-semibold">ชื่อ-นามสกุล (รหัส)</th>
+                                    <th class="p-4 font-semibold text-center">ชั้น</th>
+                                    <th class="p-4 font-semibold text-center">ภาษาไทย</th>
+                                    <th class="p-4 font-semibold text-center">คณิตศาสตร์</th>
+                                    <th class="p-4 font-semibold">ปัญหาหลัก (Pain Point)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="risk-tbody" class="text-sm divide-y divide-gray-100">
+                                <!-- Data injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: Final Report -->
+            <section id="view-report" class="view-section hide">
+                <div class="max-w-4xl mx-auto glass-card rounded-2xl p-8 bg-white shadow-lg print:shadow-none print:p-0">
+                    <!-- Report Header -->
+                    <div class="text-center border-b-2 border-gray-800 pb-6 mb-6">
+                        <div class="w-20 h-20 mx-auto bg-primary rounded-full flex items-center justify-center text-white text-4xl mb-4 print:bg-black print:text-white">
+                            <i class="fa-solid fa-school"></i>
+                        </div>
+                        <h1 class="text-2xl font-black text-dark mb-1">รายงานสรุปผลสัมฤทธิ์ทางการเรียน</h1>
+                        <h2 class="text-xl font-bold text-gray-700">โครงการ "อ่านสนุก ปลุกความคิด"</h2>
+                        <p class="text-gray-500 mt-2">โรงเรียนบ้านเจ๊ะยอ • ปีการศึกษา 2569</p>
+                        <p class="text-xs text-gray-400 mt-1" id="report-date">พิมพ์เมื่อ: -</p>
+                    </div>
+
+                    <!-- Report Body -->
+                    <div class="space-y-6 text-gray-800" id="report-content">
+                        <!-- Content generated by JS based on data -->
+                    </div>
+                    
+                    <!-- Signatures -->
+                    <div class="grid grid-cols-2 gap-8 mt-16 pt-8 border-t border-gray-200">
+                        <div class="text-center">
+                            <p class="mb-8">ลงชื่อ.......................................................</p>
+                            <p class="font-bold text-sm">( ....................................................... )</p>
+                            <p class="text-xs text-gray-500 mt-1">ครูวิชาการ / ผู้รวบรวมข้อมูล</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="mb-8">ลงชื่อ.......................................................</p>
+                            <p class="font-bold text-sm">( ....................................................... )</p>
+                            <p class="text-xs text-gray-500 mt-1">ผู้อำนวยการโรงเรียนบ้านเจ๊ะยอ</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 text-center print:hidden">
+                        <button onclick="window.print()" class="bg-dark text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-black transition">
+                            <i class="fa-solid fa-print mr-2"></i> พิมพ์เอกสารรายงาน
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script>
+        // --- Configuration ---
+        const SHEET_ID = '18smroC9gkCLBEwoYBPaX5iPZrs0ug08nEL6xM5nM-LQ';
+        const SHEET_NAME = 'DATA';
+        const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${SHEET_NAME}`;
+
+        // --- State ---
+        let rawData = [];
+        let students = [];
+        let chartsObj = {};
+        let currentSort = { col: 'id', asc: true };
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchData();
+            
+            // Setup Event Listeners
+            document.getElementById('search-input').addEventListener('input', () => filterAndRenderTable());
+            document.getElementById('filter-class-select').addEventListener('change', () => filterAndRenderTable());
+            document.getElementById('filter-status-select').addEventListener('change', () => filterAndRenderTable());
+        });
+
+        // --- UI Interactions ---
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
+        }
+
+        function switchView(viewId) {
+            // Hide all, remove active states
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hide'));
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+            
+            // Show target
+            document.getElementById(`view-${viewId}`).classList.remove('hide');
+            const nav = document.getElementById(`nav-${viewId}`);
+            if(nav) nav.classList.add('active');
+
+            // Close mobile sidebar
+            if(window.innerWidth < 768) {
+                document.getElementById('sidebar').classList.add('-translate-x-full');
+                document.getElementById('sidebar-overlay').classList.add('hidden');
+            }
+        }
+
+        // --- Data Fetching ---
+        async function fetchData() {
+            document.getElementById('loading-state').classList.remove('hidden');
+            document.getElementById('main-scroll-area').classList.add('overflow-hidden');
+
+            try {
+                const response = await fetch(CSV_URL);
+                if (!response.ok) throw new Error('Cannot fetch sheet');
+                const text = await response.text();
+                
+                Papa.parse(text, {
+                    header: true, skipEmptyLines: true,
+                    complete: (res) => {
+                        if(res.data && res.data.length > 0) {
+                            processData(res.data);
+                        } else throw new Error('Empty Data');
+                    }
+                });
+            } catch (err) {
+                console.warn("Failed to load real sheet. Loading Mock Data.", err);
+                document.getElementById('data-source-alert').classList.remove('hidden');
+                loadMockData();
+            }
+        }
+
+        function processData(data) {
+            students = data.map(row => {
+                // Helper to find keys flexibly
+                const findKey = (keywords) => {
+                    for (let k in row) {
+                        if (keywords.some(kw => k.toLowerCase().includes(kw))) return row[k];
+                    }
+                    return null;
+                };
+
+                const id = findKey(['รหัส', 'id']) || `UNK-${Math.floor(Math.random()*1000)}`;
+                const name = findKey(['ชื่อ', 'สกุล', 'name']) || 'ไม่ระบุ';
+                
+                let cls = findKey(['ชั้น', 'class', 'ระดับ']) || '';
+                if(cls.includes('1')) cls = 'ป.1';
+                else if(cls.includes('2')) cls = 'ป.2';
+                else if(cls.includes('3')) cls = 'ป.3';
+                else cls = 'อื่นๆ';
+
+                const thai = parseFloat(findKey(['ไทย', 'ภาษาไทย', 'thai'])) || 0;
+                const math = parseFloat(findKey(['คณิต', 'math'])) || 0;
+                const avg = (thai + math) / 2;
+
+                let status = 'fail';
+                if(avg >= 80) status = 'excellent';
+                else if(avg >= 50) status = 'pass';
+
+                return { id, name, class: cls, thai, math, avg, status };
+            }).filter(s => ['ป.1', 'ป.2', 'ป.3'].includes(s.class)); // Keep only target classes
+
+            finishLoading();
+        }
+
+        function loadMockData() {
+            const firstNames = ["สมชาย", "สมหญิง", "มานะ", "ปิติ", "ชูใจ", "วีระ", "ดวงดาว", "ตะวัน", "นภา", "สายชล"];
+            const lastNames = ["รักเรียน", "ตั้งใจ", "อดทน", "ยินดี", "กล้าหาญ", "ส่องแสง", "ฉาย", "ใจดี", "มีสุข", "พากเพียร"];
+            const clss = ['ป.1', 'ป.2', 'ป.3'];
+            students = [];
+            
+            for(let i=1; i<=60; i++) {
+                // Bias math slightly lower for realistic variance
+                const thai = Math.floor(Math.random() * (100 - 30) + 30);
+                const math = Math.floor(Math.random() * (95 - 20) + 20); 
+                const avg = (thai + math)/2;
+                
+                let status = 'fail';
+                if(avg >= 80) status = 'excellent';
+                else if(avg >= 50) status = 'pass';
+
+                students.push({
+                    id: `69${String(i).padStart(3, '0')}`,
+                    name: `${firstNames[i%10]} ${lastNames[(i*3)%10]}`,
+                    class: clss[i%3],
+                    thai, math, avg, status
+                });
+            }
+            finishLoading();
+        }
+
+        function finishLoading() {
+            // Update time
+            const now = new Date();
+            document.getElementById('last-update-text').innerText = `อัปเดตล่าสุด: ${now.toLocaleTimeString('th-TH')}`;
+            
+            // Remove loader
+            setTimeout(() => {
+                document.getElementById('loading-state').classList.add('hidden');
+                document.getElementById('main-scroll-area').classList.remove('overflow-hidden');
+                
+                // Initialize all views
+                updateDashboard();
+                filterAndRenderTable(); // Render main table
+                updateAnalysisViews();
+                updateComparisonView();
+                updateNeedsImprovement();
+                generateReport();
+                
+                // Show dashboard initially
+                switchView('dashboard');
+            }, 500); // slight delay for visual smoothness
+        }
+
+        Chart.defaults.font.family = 'Sarabun';
+        Chart.defaults.color = '#64748b';
+
+        function updateDashboard() {
+            const total = students.length;
+            const avgThai = students.reduce((s, st) => s + st.thai, 0) / (total || 1);
+            const avgMath = students.reduce((s, st) => s + st.math, 0) / (total || 1);
+            const risks = students.filter(s => s.status === 'fail' || s.thai < 50 || s.math < 50);
+
+            // Update DOM
+            animateValue('kpi-total', 0, total, 1000);
+            animateValue('kpi-thai-avg', 0, avgThai, 1000, 1);
+            animateValue('kpi-math-avg', 0, avgMath, 1000, 1);
+            animateValue('kpi-risk', 0, risks.length, 1000);
+
+            // Badge
+            const badge = document.getElementById('alert-badge');
+            if(risks.length > 0) {
+                badge.innerText = risks.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            // AI Insight Logic
+            let insight = "";
+            if (risks.length / total > 0.3) insight = `🚨 ระดับความเสี่ยงสูง: พบนักเรียนที่ต้องพัฒนาเร่งด่วนถึง ${Math.round(risks.length/total*100)}% ของทั้งหมด ควรเร่งทบทวนแผนการสอน`;
+            else if (avgThai - avgMath > 15) insight = `⚠️ ข้อสังเกต: ผลสัมฤทธิ์วิชาคณิตศาสตร์ (${avgMath.toFixed(1)}) ต่ำกว่าภาษาไทยมาก ควรจัดกิจกรรมเสริมทักษะคำนวณ`;
+            else if (avgMath - avgThai > 15) insight = `⚠️ ข้อสังเกต: ผลสัมฤทธิ์วิชาภาษาไทย (${avgThai.toFixed(1)}) ต่ำกว่าคณิตศาสตร์ ควรเน้นกิจกรรมส่งเสริมการอ่านเขียน`;
+            else insight = `✅ ภาพรวมเกณฑ์ปกติ: ผลสัมฤทธิ์ทั้งสองวิชามีความสมดุล ควรต่อยอดกลุ่มดีเยี่ยมและดูแลกลุ่มเสี่ยง (${risks.length} คน)`;
+            document.getElementById('dashboard-insight-text').innerText = insight;
+
+            // Prepare Data for Charts
+            const classes = ['ป.1', 'ป.2', 'ป.3'];
+            const classData = classes.map(c => {
+                const stds = students.filter(s => s.class === c);
+                return {
+                    thai: stds.reduce((s, st) => s + st.thai, 0) / (stds.length || 1),
+                    math: stds.reduce((s, st) => s + st.math, 0) / (stds.length || 1)
+                };
+            });
+
+            // 1. Dashboard Bar Chart
+            if(chartsObj.dashBar) chartsObj.dashBar.destroy();
+            chartsObj.dashBar = new Chart(document.getElementById('chartDashboardBar').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: classes,
+                    datasets: [
+                        { label: 'ภาษาไทย', data: classData.map(d=>d.thai), backgroundColor: '#10b981', borderRadius: 6 },
+                        { label: 'คณิตศาสตร์', data: classData.map(d=>d.math), backgroundColor: '#8b5cf6', borderRadius: 6 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100 } }, plugins: { legend: { position: 'top' } } }
+            });
+
+            // 2. Dashboard Donut
+            const counts = [
+                students.filter(s=>s.status==='excellent').length,
+                students.filter(s=>s.status==='pass').length,
+                students.filter(s=>s.status==='fail').length
+            ];
+            document.getElementById('donut-center-total').innerText = total;
+
+            if(chartsObj.dashDonut) chartsObj.dashDonut.destroy();
+            chartsObj.dashDonut = new Chart(document.getElementById('chartDashboardDonut').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['ดีเยี่ยม (80+)', 'ผ่านเกณฑ์ (50-79)', 'ต้องพัฒนา (<50)'],
+                    datasets: [{ data: counts, backgroundColor: ['#10b981', '#f59e0b', '#ef4444'], borderWidth: 0, hoverOffset: 10 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } }
+            });
+        }
+
+        function sortTable(col) {
+            if(currentSort.col === col) currentSort.asc = !currentSort.asc;
+            else { currentSort.col = col; currentSort.asc = true; }
+            filterAndRenderTable();
+        }
+
+        function filterAndRenderTable() {
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const clsFilter = document.getElementById('filter-class-select').value;
+            const statusFilter = document.getElementById('filter-status-select').value;
+
+            // Filter
+            let filtered = students.filter(s => {
+                const matchSearch = s.name.toLowerCase().includes(search) || s.id.toLowerCase().includes(search);
+                const matchCls = clsFilter === 'all' || s.class === clsFilter;
+                const matchStatus = statusFilter === 'all' || s.status === statusFilter;
+                return matchSearch && matchCls && matchStatus;
+            });
+
+            // Sort
+            filtered.sort((a, b) => {
+                let valA = a[currentSort.col]; let valB = b[currentSort.col];
+                if(typeof valA === 'string') valA = valA.toLowerCase(), valB = valB.toLowerCase();
+                if(valA < valB) return currentSort.asc ? -1 : 1;
+                if(valA > valB) return currentSort.asc ? 1 : -1;
+                return 0;
+            });
+
+            const tbody = document.getElementById('students-tbody');
+            tbody.innerHTML = '';
+            
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center p-8 text-gray-400">ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
+                document.getElementById('table-showing-info').innerText = `แสดง 0 รายการ`;
+                return;
+            }
+
+            filtered.forEach(s => {
+                let badge = '';
+                if(s.status === 'excellent') badge = '<span class="bg-green-100 text-green-700 px-2 py-1 rounded-md text-[10px] font-bold">ดีเยี่ยม</span>';
+                else if(s.status === 'pass') badge = '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[10px] font-bold">ผ่านเกณฑ์</span>';
+                else badge = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded-md text-[10px] font-bold animate-pulse">ต้องพัฒนา</span>';
+
+                const colorTh = s.thai < 50 ? 'text-red-500 font-bold' : 'text-gray-700';
+                const colorMa = s.math < 50 ? 'text-red-500 font-bold' : 'text-gray-700';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-4 text-gray-500 font-mono text-xs">${s.id}</td>
+                    <td class="p-4 font-medium text-dark">${s.name}</td>
+                    <td class="p-4 text-center text-gray-500">${s.class}</td>
+                    <td class="p-4 text-center ${colorTh}">${s.thai.toFixed(1)}</td>
+                    <td class="p-4 text-center ${colorMa}">${s.math.toFixed(1)}</td>
+                    <td class="p-4 text-center font-bold text-primary">${s.avg.toFixed(1)}</td>
+                    <td class="p-4 text-center">${badge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('table-showing-info').innerText = `แสดง ${filtered.length} จาก ${students.length} รายการ`;
+        }
+
+        function updateAnalysisViews() {
+            const classes = ['ป.1', 'ป.2', 'ป.3'];
+            let tAvgs = [], mAvgs = [];
+
+            // Helper to render subject cards
+            const renderCards = (subject, containerId) => {
+                const container = document.getElementById(containerId);
+                container.innerHTML = '';
+                let totalScore = 0;
+
+                classes.forEach(c => {
+                    const stds = students.filter(s => s.class === c);
+                    if(!stds.length) return;
+                    
+                    const scores = stds.map(s => subject === 'thai' ? s.thai : s.math);
+                    const avg = scores.reduce((a,b)=>a+b,0) / scores.length;
+                    const passRate = (scores.filter(sc => sc >= 50).length / scores.length) * 100;
+                    
+                    if(subject==='thai') tAvgs.push(avg); else mAvgs.push(avg);
+                    totalScore += avg;
+
+                    let colorClass = passRate >= 80 ? 'green' : (passRate >= 50 ? 'amber' : 'red');
+
+                    container.innerHTML += `
+                        <div class="border border-gray-200 rounded-xl p-4 bg-white relative overflow-hidden">
+                            <div class="absolute top-0 right-0 w-1 h-full bg-${colorClass}-500"></div>
+                            <h4 class="font-bold text-dark text-lg mb-2">ชั้น ${c}</h4>
+                            <div class="flex justify-between items-end mb-2">
+                                <span class="text-xs text-gray-500">คะแนนเฉลี่ย</span>
+                                <span class="font-black text-2xl text-dark">${avg.toFixed(1)}</span>
+                            </div>
+                            <div class="w-full bg-gray-100 rounded-full h-1.5 mb-2"><div class="bg-primary h-1.5 rounded-full" style="width: ${avg}%"></div></div>
+                            <p class="text-xs text-gray-500 mt-3">นักเรียนผ่านเกณฑ์: <span class="font-bold text-${colorClass}-600">${passRate.toFixed(0)}%</span></p>
+                        </div>
+                    `;
+                });
+                return totalScore / 3;
+            };
+
+            const ovThai = renderCards('thai', 'thai-class-cards');
+            const ovMath = renderCards('math', 'math-class-cards');
+            
+            document.getElementById('thai-overall-avg').innerText = ovThai.toFixed(1);
+            document.getElementById('math-overall-avg').innerText = ovMath.toFixed(1);
+
+            // Mini Trend Charts
+            const chartConfig = (data, color) => ({
+                type: 'line', data: { labels: classes, datasets: [{ data: data, borderColor: color, backgroundColor: color+'33', fill: true, tension: 0.4 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100, display: false }, x: { grid: {display:false} } }, plugins: { legend: {display:false}, tooltip: {enabled: true} }, elements: { point: {radius: 4, hoverRadius: 6} } }
+            });
+
+            if(chartsObj.trendT) chartsObj.trendT.destroy();
+            chartsObj.trendT = new Chart(document.getElementById('chartThaiTrend').getContext('2d'), chartConfig(tAvgs, '#10b981'));
+            
+            if(chartsObj.trendM) chartsObj.trendM.destroy();
+            chartsObj.trendM = new Chart(document.getElementById('chartMathTrend').getContext('2d'), chartConfig(mAvgs, '#8b5cf6'));
+        }
+
+        function updateComparisonView() {
+            const classes = ['ป.1', 'ป.2', 'ป.3'];
+            const radarLabels = ['ทักษะการอ่าน (ไทย)', 'ทักษะการเขียน (ไทย)', 'ทักษะคำนวณ (คณิต)', 'ทรรศนะคติ', 'การแก้ปัญหา'];
+            
+            // Mocking detailed dimensions based on raw scores for radar
+            const dataSets = classes.map((c, idx) => {
+                const stds = students.filter(s => s.class === c);
+                const t = stds.reduce((a,b)=>a+b.thai,0)/stds.length;
+                const m = stds.reduce((a,b)=>a+b.math,0)/stds.length;
+                const colors = ['rgba(59, 130, 246,', 'rgba(16, 185, 129,', 'rgba(245, 158, 11,']; // Blue, Green, Amber
+                
+                return {
+                    label: c,
+                    data: [t, t*0.9, m, (t+m)/2 * 1.1, m*0.95], // Simulated sub-skills
+                    backgroundColor: colors[idx] + ' 0.2)',
+                    borderColor: colors[idx] + ' 1)',
+                    pointBackgroundColor: colors[idx] + ' 1)',
+                    borderWidth: 2
+                }
+            });
+
+            if(chartsObj.radar) chartsObj.radar.destroy();
+            chartsObj.radar = new Chart(document.getElementById('chartRadarComparison').getContext('2d'), {
+                type: 'radar',
+                data: { labels: radarLabels, datasets: dataSets },
+                options: { responsive: true, maintainAspectRatio: false, scales: { r: { min: 0, max: 100, ticks: {stepSize: 20} } } }
+            });
+
+            // Gap Analysis List
+            const gapList = document.getElementById('gap-analysis-list');
+            gapList.innerHTML = '';
+            
+            classes.forEach(c => {
+                const stds = students.filter(s => s.class === c);
+                const t = stds.reduce((a,b)=>a+b.thai,0)/stds.length;
+                const m = stds.reduce((a,b)=>a+b.math,0)/stds.length;
+                const diff = Math.abs(t - m);
+                
+                let icon = '<i class="fa-solid fa-check-circle text-green-500"></i>';
+                let text = `ความสมดุลดีเยี่ยม คะแนนใกล้เคียงกัน`;
+                let bg = 'bg-green-50 border-green-100';
+
+                if (diff > 10) {
+                    icon = '<i class="fa-solid fa-triangle-exclamation text-amber-500"></i>';
+                    bg = 'bg-amber-50 border-amber-100';
+                    if (t > m) text = `คะแนนคณิตศาสตร์ ตามหลัง ภาษาไทย อยู่ ${diff.toFixed(1)} คะแนน`;
+                    else text = `คะแนนภาษาไทย ตามหลัง คณิตศาสตร์ อยู่ ${diff.toFixed(1)} คะแนน`;
+                }
+
+                gapList.innerHTML += `
+                    <li class="flex gap-3 p-3 rounded-lg border ${bg}">
+                        <div class="mt-0.5">${icon}</div>
+                        <div>
+                            <span class="font-bold text-dark text-sm">วิเคราะห์ ${c}</span>
+                            <p class="text-xs text-gray-600 mt-1">${text}</p>
+                        </div>
+                    </li>
+                `;
+            });
+        }
+
+        function updateNeedsImprovement() {
+            const risks = students.filter(s => s.status === 'fail' || s.thai < 50 || s.math < 50);
+            
+            // Sort by lowest average first
+            risks.sort((a,b) => a.avg - b.avg);
+
+            const tbody = document.getElementById('risk-tbody');
+            tbody.innerHTML = '';
+
+            if(risks.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-face-smile text-2xl mb-2 block"></i> ยอดเยี่ยม! ไม่พบนักเรียนในกลุ่มเสี่ยง</td></tr>`;
+                return;
+            }
+
+            risks.forEach(s => {
+                let pains = [];
+                if(s.thai < 50) pains.push('ภาษาไทย');
+                if(s.math < 50) pains.push('คณิตศาสตร์');
+                
+                const painText = pains.join(' และ ');
+                const isCritical = s.avg < 40;
+
+                const tr = document.createElement('tr');
+                if(isCritical) tr.classList.add('bg-red-50/50');
+                
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <div class="font-bold text-dark">${s.name} ${isCritical ? '<i class="fa-solid fa-triangle-exclamation text-red-500 text-[10px] ml-1" title="วิกฤต"></i>' : ''}</div>
+                        <div class="text-[10px] text-gray-500 font-mono mt-0.5">${s.id}</div>
+                    </td>
+                    <td class="p-4 text-center font-medium">${s.class}</td>
+                    <td class="p-4 text-center ${s.thai < 50 ? 'text-red-600 font-bold bg-red-50 rounded-lg' : 'text-gray-500'}">${s.thai.toFixed(1)}</td>
+                    <td class="p-4 text-center ${s.math < 50 ? 'text-red-600 font-bold bg-red-50 rounded-lg' : 'text-gray-500'}">${s.math.toFixed(1)}</td>
+                    <td class="p-4 text-xs">
+                        <span class="inline-block bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 font-medium">อ่อน ${painText}</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function generateReport() {
+            const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('report-date').innerText = `ข้อมูลประมวลผล ณ วันที่: ${dateStr}`;
+
+            const total = students.length;
+            if(!total) return;
+
+            const tAvg = students.reduce((a,b)=>a+b.thai,0)/total;
+            const mAvg = students.reduce((a,b)=>a+b.math,0)/total;
+            const excel = students.filter(s=>s.status==='excellent').length;
+            const fail = students.filter(s=>s.status==='fail').length;
+            
+            const content = document.getElementById('report-content');
+            
+            // Auto generate text based on stats
+            content.innerHTML = `
+                <div class="mb-6">
+                    <h3 class="font-bold text-lg text-dark border-l-4 border-primary pl-3 mb-3">1. ข้อมูลทั่วไป</h3>
+                    <p class="leading-relaxed text-sm ml-4">
+                        รายงานฉบับนี้สรุปผลการประเมินนักเรียนระดับชั้น ป.1 - ป.3 จำนวนทั้งสิ้น <strong>${total} คน</strong> 
+                        ในโครงการ "อ่านสนุก ปลุกความคิด" เพื่อติดตามพัฒนาการด้านทักษะภาษาไทยและคณิตศาสตร์
+                    </p>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-lg text-dark border-l-4 border-primary pl-3 mb-3">2. สรุปผลสัมฤทธิ์ภาพรวม</h3>
+                    <div class="ml-4 grid grid-cols-2 gap-4 text-sm">
+                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            คะแนนเฉลี่ย ภาษาไทย: <strong class="text-green-600 text-lg">${tAvg.toFixed(2)}</strong> / 100
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            คะแนนเฉลี่ย คณิตศาสตร์: <strong class="text-purple-600 text-lg">${mAvg.toFixed(2)}</strong> / 100
+                        </div>
+                    </div>
+                    <ul class="list-disc list-inside ml-4 mt-3 text-sm space-y-1">
+                        <li>นักเรียนในกลุ่ม <strong>"ดีเยี่ยม"</strong> (เฉลี่ย 80 ขึ้นไป) จำนวน ${excel} คน คิดเป็น ${((excel/total)*100).toFixed(1)}%</li>
+                        <li>นักเรียนในกลุ่ม <strong>"ต้องพัฒนาเร่งด่วน"</strong> (เฉลี่ยต่ำกว่า 50) จำนวน <span class="text-red-600 font-bold">${fail} คน</span> คิดเป็น ${((fail/total)*100).toFixed(1)}%</li>
+                    </ul>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-lg text-dark border-l-4 border-primary pl-3 mb-3">3. ข้อเสนอแนะแนวทางพัฒนา (AI Generated)</h3>
+                    <div class="ml-4 bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm">
+                        <p class="mb-2 text-blue-900">จากข้อมูลสถิติ ขอเสนอแนวทางดำเนินการดังนี้:</p>
+                        <ol class="list-decimal list-inside space-y-2 text-blue-800">
+                            ${fail > 0 ? `<li><strong>เร่งจัดการสอนซ่อมเสริม:</strong> ให้นักเรียนกลุ่มเสี่ยงจำนวน ${fail} คน โดยเน้นแก้ปัญหาเฉพาะจุด (Personalized Remedial)</li>` : '<li><strong>รักษาระดับคุณภาพ:</strong> ไม่มีนักเรียนในเกณฑ์ต้องพัฒนาเร่งด่วน ควรส่งเสริมการเรียนรู้ระดับสูงต่อไป</li>'}
+                            ${tAvg > mAvg ? '<li><strong>ยกระดับวิชาคณิตศาสตร์:</strong> เนื่องจากคะแนนเฉลี่ยต่ำกว่าภาษาไทย ควรจัดกิจกรรมที่เน้นทักษะการคิดคำนวณและแก้โจทย์ปัญหา</li>' : '<li><strong>ส่งเสริมทักษะการอ่าน:</strong> เนื่องจากคะแนนคณิตศาสตร์นำหน้า ควรเพิ่มกิจกรรมรักการอ่านและการเขียนเชิงสร้างสรรค์</li>'}
+                            <li><strong>การติดตามผล:</strong> กำหนดการประเมินผลรอบถัดไปภายใน 4 สัปดาห์ เพื่อติดตามพัฒนาการของกลุ่มเป้าหมาย</li>
+                        </ol>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Utility: Animate numbers
+        function animateValue(id, start, end, duration, decimals=0) {
+            if (start === end) return;
+            let range = end - start;
+            let current = start;
+            let increment = end > start ? 1 : -1;
+            let stepTime = Math.abs(Math.floor(duration / range));
+            let obj = document.getElementById(id);
+            if(!obj) return;
+            
+            // For small numbers or decimals, use requestAnimationFrame approach
+            if(range < 10 || decimals > 0) {
+                let startTime = null;
+                const step = (timestamp) => {
+                    if (!startTime) startTime = timestamp;
+                    const progress = Math.min((timestamp - startTime) / duration, 1);
+                    const val = start + (range * progress);
+                    obj.innerHTML = decimals ? val.toFixed(decimals) : Math.floor(val);
+                    if (progress < 1) window.requestAnimationFrame(step);
+                };
+                window.requestAnimationFrame(step);
+            } else {
+                 let timer = setInterval(function() {
+                    current += increment;
+                    obj.innerHTML = current;
+                    if (current == end) clearInterval(timer);
+                }, stepTime);
+            }
+        }
+    </script>
+</body>
+</html>
