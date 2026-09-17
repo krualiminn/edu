@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AKHLAQ CLASSROOM - ระบบวิเคราะห์ผลข้อสอบ</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'sans-serif'],
+                    },
+                    colors: {
+                        background: '#F7F9FE',
+                        primary: '#4F6EF7',
+                        primaryHover: '#3b55d9',
+                        sky: '#4CC9F0',
+                        purple: '#8B5CF6',
+                        mint: '#36D399',
+                        yellow: '#FBBF24',
+                        coral: '#FB7185',
+                        dark: '#1e293b',
+                        grayLight: '#f1f5f9',
+                        /* Pastel Palette for Feedback */
+                        pastel: {
+                            mint: '#d1fae5',
+                            sky: '#e0f2fe',
+                            lavender: '#ede9fe',
+                            peach: '#ffedd5',
+                            pink: '#fce7f3',
+                            yellow: '#fef3c7'
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                        'card': '0 2px 10px rgba(0, 0, 0, 0.03)',
+                        'glow': '0 0 20px rgba(79, 110, 247, 0.15)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #F7F9FE;
+            color: #334155;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Animations */
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .slide-in-right { animation: slideInRight 0.3s ease-out forwards; }
+        .slide-up { animation: slideUp 0.3s ease-out forwards; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* Progress Ring */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.8s ease-in-out;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* Utilities */
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .overlay { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+
+        /* Masonry Layout for Feedbacks */
+        .masonry-grid {
+            column-count: 1;
+            column-gap: 1rem;
+        }
+        @media (min-width: 768px) { .masonry-grid { column-count: 2; } }
+        @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
+        .masonry-item {
+            break-inside: avoid;
+            margin-bottom: 1rem;
+            display: inline-block;
+            width: 100%;
+        }
+
+        /* Print Styles */
+        @media print {
+            @page { margin: 1cm; size: A4 portrait; }
+            body, html { background: white !important; height: auto !important; overflow: visible !important; }
+            aside, header, nav, #mobile-menu, #panel-backdrop, [id^="panel-"], .no-print { display: none !important; }
+            main { flex: none !important; width: 100% !important; display: block !important; padding: 0 !important; }
+            #content-container { height: auto !important; overflow: visible !important; padding: 0 !important; }
+            .view-section { display: none !important; }
+            #view-report { display: block !important; padding: 0 !important; }
+            .print-page-break { page-break-before: always; break-before: page; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden text-sm md:text-base">
+
+    <!-- Sidebar (Desktop) -->
+    <aside class="w-64 bg-white border-r border-gray-100 hidden md:flex flex-col h-full shadow-sm no-print z-20">
+        <div class="p-6">
+            <h1 class="text-xl font-bold text-primary flex items-center gap-2 tracking-tight">
+                <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><i class="ph-fill ph-student text-xl"></i></div>
+                AKHLAQ<br>CLASSROOM
+            </h1>
+        </div>
+        
+        <nav class="flex-1 px-4 space-y-1 overflow-y-auto hide-scroll">
+            <button onclick="navigate('home')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors active text-primary bg-blue-50 font-medium" data-view="home">
+                <i class="ph-fill ph-squares-four text-xl"></i> ภาพรวม
+            </button>
+            <button onclick="navigate('students')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors text-slate-500 hover:bg-slate-50 hover:text-primary" data-view="students">
+                <i class="ph-fill ph-users text-xl"></i> นักเรียน
+            </button>
+            <button onclick="navigate('questions')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors text-slate-500 hover:bg-slate-50 hover:text-primary" data-view="questions">
+                <i class="ph-fill ph-exam text-xl"></i> ข้อสอบ
+            </button>
+            <button onclick="navigate('focus')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors text-slate-500 hover:bg-slate-50 hover:text-coral" data-view="focus">
+                <i class="ph-fill ph-target text-xl"></i> จุดที่ควรทบทวน
+            </button>
+            <button onclick="navigate('insights')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors text-slate-500 hover:bg-slate-50 hover:text-purple" data-view="insights">
+                <i class="ph-fill ph-sparkle text-xl"></i> วิเคราะห์ห้อง
+            </button>
+            <button onclick="navigate('feedback')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors text-slate-500 hover:bg-slate-50 hover:text-mint" data-view="feedback">
+                <i class="ph-fill ph-chat-teardrop-text text-xl"></i> เสียงนักเรียน
+            </button>
+            <button onclick="navigate('report')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors text-slate-500 hover:bg-slate-50 hover:text-primary" data-view="report">
+                <i class="ph-fill ph-printer text-xl"></i> รายงาน
+            </button>
+            
+            <div class="pt-6 pb-2">
+                <p class="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">ระบบ</p>
+            </div>
+            <button onclick="navigate('settings')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-colors text-slate-500 hover:bg-slate-50 hover:text-primary" data-view="settings">
+                <i class="ph-fill ph-gear text-xl"></i> ตั้งค่า
+            </button>
+        </nav>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full relative w-full bg-background print-full">
+        <!-- Topbar -->
+        <header class="h-16 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-4 md:px-8 z-10 no-print sticky top-0">
+            <div class="flex items-center gap-4">
+                <span class="text-lg font-bold text-primary md:hidden flex items-center gap-2"><i class="ph-fill ph-student"></i> AKHLAQ</span>
+            </div>
+            
+            <div class="flex items-center gap-3 md:gap-4">
+                <span id="last-update" class="text-xs font-medium text-slate-400 hidden md:block bg-grayLight px-3 py-1.5 rounded-full">อัปเดต: --:--</span>
+                <button onclick="appState.refreshData()" class="px-4 py-2 text-sm font-medium text-primary hover:text-white bg-blue-50 hover:bg-primary rounded-full transition-colors flex items-center gap-2 group shadow-sm" title="รีเฟรชข้อมูล">
+                    <i class="ph-bold ph-arrows-clockwise text-lg group-hover:rotate-180 transition-transform duration-500"></i> <span class="hidden md:inline">รีเฟรชข้อมูล</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Container -->
+        <div id="content-container" class="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8 relative scroll-smooth">
+            
+            <!-- System Screens -->
+            <div id="loading-screen" class="absolute inset-0 bg-background/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+                <div class="relative w-20 h-20 mb-4">
+                    <div class="absolute inset-0 border-4 border-gray-100 rounded-full"></div>
+                    <div class="absolute inset-0 border-4 border-primary rounded-full border-t-transparent animate-spin"></div>
+                    <i class="ph-fill ph-student text-2xl text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i>
+                </div>
+                <h2 id="loading-text" class="text-xl font-bold text-slate-700">กำลังซิงค์ข้อมูลห้องเรียน...</h2>
+                <p class="text-slate-400 text-sm mt-2">ดึงข้อมูลสดจาก Google Sheets</p>
+            </div>
+
+            <div id="error-screen" class="hidden absolute inset-0 bg-background z-50 flex flex-col items-center justify-center fade-in">
+                <div class="w-24 h-24 bg-coral/10 rounded-full flex items-center justify-center mb-6">
+                    <i class="ph-fill ph-warning-circle text-5xl text-coral"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800 mb-2">อ๊ะ! พบปัญหาในการเชื่อมต่อ</h2>
+                <p id="error-msg" class="text-slate-500 mb-8 text-center max-w-md">ตรวจสอบ Link Google Sheets หรือโครงสร้างคอลัมน์ (A-BF)</p>
+                <button onclick="appState.refreshData()" class="px-8 py-3 bg-primary text-white rounded-xl font-medium hover:bg-primaryHover transition-colors shadow-lg shadow-primary/30 flex items-center gap-2">
+                    <i class="ph-bold ph-arrows-clockwise"></i> ลองเชื่อมต่อใหม่
+                </button>
+            </div>
+
+            <!-- ================= VIEW: HOME ================= -->
+            <div id="view-home" class="view-section hidden fade-in space-y-6 max-w-7xl mx-auto">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">อัสลามุอะลัยกุม, อุสตาส 👋</h2>
+                    <p id="home-greeting-desc" class="text-slate-500 mt-1">สรุปภาพรวมการสอบวิชาอัคลาควันนี้</p>
+                </div>
+
+                <!-- Hero -->
+                <div class="bg-white rounded-3xl p-6 md:p-8 shadow-soft border border-gray-50 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary/10 to-purple/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl group-hover:scale-110 transition-transform duration-700"></div>
+                    
+                    <div class="flex-shrink-0 relative">
+                        <svg class="w-40 h-40 drop-shadow-md" viewBox="0 0 120 120">
+                            <circle class="text-gray-100" stroke-width="8" stroke="currentColor" fill="transparent" r="52" cx="60" cy="60"/>
+                            <circle id="hero-progress-ring" class="text-primary progress-ring__circle" stroke-width="8" stroke-linecap="round" stroke="currentColor" fill="transparent" r="52" cx="60" cy="60" stroke-dasharray="326.72" stroke-dashoffset="326.72"/>
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span id="hero-avg-percent" class="text-3xl font-bold text-slate-800">0%</span>
+                            <span class="text-[10px] text-slate-400 font-bold tracking-wider uppercase">ความถูกต้องเฉลี่ย</span>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-4 w-full z-10">
+                        <div class="bg-grayLight p-4 rounded-2xl border border-white">
+                            <div class="text-slate-500 text-xs font-medium mb-1">ส่งคำตอบแล้ว</div>
+                            <div class="flex items-baseline gap-1"><span id="hero-total-students" class="text-2xl font-bold text-slate-800">0</span> <span class="text-sm text-slate-500">คน</span></div>
+                        </div>
+                        <div class="bg-mint/10 p-4 rounded-2xl border border-white">
+                            <div class="text-mint font-semibold text-xs mb-1 flex items-center gap-1"><i class="ph-fill ph-check-circle"></i> ผ่านเกณฑ์</div>
+                            <div class="flex items-baseline gap-1"><span id="hero-passed" class="text-2xl font-bold text-mint">0</span> <span class="text-sm text-mint opacity-80">คน</span></div>
+                        </div>
+                        <div class="bg-purple/10 p-4 rounded-2xl border border-white">
+                            <div class="text-purple font-semibold text-xs mb-1">คะแนนสูงสุด</div>
+                            <div id="hero-max" class="text-2xl font-bold text-purple">0</div>
+                        </div>
+                        <div class="bg-coral/10 p-4 rounded-2xl border border-white">
+                            <div class="text-coral font-semibold text-xs mb-1">คะแนนต่ำสุด</div>
+                            <div id="hero-min" class="text-2xl font-bold text-coral">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Insights -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-card border border-gray-50 hover:-translate-y-1 transition-transform cursor-pointer" onclick="navigate('students')">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-full bg-yellow/20 flex items-center justify-center text-yellow"><i class="ph-fill ph-star text-xl"></i></div>
+                            <h3 class="font-bold text-slate-700">ทำได้ดีเยี่ยม</h3>
+                        </div>
+                        <p id="insight-excellent" class="text-sm text-slate-500 line-clamp-2">กำลังประมวลผล...</p>
+                    </div>
+                    
+                    <div class="bg-white p-5 rounded-2xl shadow-card border border-gray-50 hover:-translate-y-1 transition-transform cursor-pointer" onclick="navigate('students')">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-full bg-coral/20 flex items-center justify-center text-coral"><i class="ph-fill ph-warning-circle text-xl"></i></div>
+                            <h3 class="font-bold text-slate-700">ควรติดตาม</h3>
+                        </div>
+                        <p id="insight-needs-help" class="text-sm text-slate-500 line-clamp-2">กำลังประมวลผล...</p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-card border border-gray-50 hover:-translate-y-1 transition-transform cursor-pointer" onclick="navigate('focus')">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary"><i class="ph-fill ph-target text-xl"></i></div>
+                            <h3 class="font-bold text-slate-700">ข้อที่พลาดมากสุด</h3>
+                        </div>
+                        <p id="insight-hardest-q" class="text-sm text-slate-500 line-clamp-2">กำลังประมวลผล...</p>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-purple to-primary p-5 rounded-2xl shadow-card hover:-translate-y-1 transition-transform cursor-pointer text-white" onclick="navigate('insights')">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"><i class="ph-fill ph-lightbulb text-xl"></i></div>
+                            <h3 class="font-bold">แนะนำคาบต่อไป</h3>
+                        </div>
+                        <p id="insight-action" class="text-sm text-white/90 line-clamp-2">กำลังประมวลผลคำแนะนำจากข้อมูลจริง...</p>
+                    </div>
+                </div>
+
+                <!-- Distribution -->
+                <div class="bg-white p-6 rounded-3xl shadow-card border border-gray-50">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ph-fill ph-chart-bar text-primary"></i> ช่วงคะแนนของห้องเรียน</h3>
+                    <div class="h-64 w-full relative"><canvas id="scoreChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: STUDENTS ================= -->
+            <div id="view-students" class="view-section hidden fade-in max-w-7xl mx-auto flex flex-col h-full min-h-[80vh]">
+                
+                <!-- Overview Bar -->
+                <div class="bg-white p-5 rounded-3xl shadow-card border border-gray-50 mb-6 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2"><i class="ph-fill ph-users text-primary"></i> นักเรียน</h2>
+                        <p class="text-slate-500 text-sm mt-1">ดูภาพรวมทั้งห้อง หรือเจาะดูผลการเรียนของแต่ละคน</p>
+                    </div>
+                    <div class="flex gap-6">
+                        <div class="text-center"><div class="text-2xl font-bold text-slate-800" id="stu-sum-total">0</div><div class="text-[10px] uppercase font-bold text-slate-400">นักเรียน (คน)</div></div>
+                        <div class="w-px bg-gray-100"></div>
+                        <div class="text-center"><div class="text-2xl font-bold text-primary" id="stu-sum-avg">0</div><div class="text-[10px] uppercase font-bold text-slate-400">เฉลี่ย (เต็ม 50)</div></div>
+                        <div class="w-px bg-gray-100 hidden sm:block"></div>
+                        <div class="text-center hidden sm:block"><div class="text-2xl font-bold text-mint" id="stu-sum-pass">0%</div><div class="text-[10px] uppercase font-bold text-slate-400">ผ่านเกณฑ์</div></div>
+                    </div>
+                </div>
+
+                <!-- Dynamic Classroom Filter -->
+                <div class="mb-4">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">ตัวกรองห้องเรียน</p>
+                    <div id="classroom-filters" class="flex flex-wrap gap-2">
+                        <!-- Rendered via JS -->
+                    </div>
+                </div>
+
+                <!-- Search & Filters -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3 mb-6">
+                    <div class="relative flex-1 group">
+                        <i class="ph-bold ph-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors text-lg"></i>
+                        <input type="text" id="stu-search" placeholder="ค้นหาชื่อ, นามสกุล หรือเลขที่..." class="w-full bg-grayLight border border-transparent focus:bg-white focus:border-primary/30 rounded-xl py-3 pl-11 pr-4 text-sm outline-none transition-all text-slate-700 placeholder:text-slate-400" oninput="renderStudentsList()">
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="stu-filter-status" class="bg-grayLight border border-transparent focus:bg-white focus:border-primary/30 text-slate-600 text-sm rounded-xl px-4 py-3 outline-none transition-all flex-1 md:flex-none cursor-pointer font-medium" onchange="renderStudentsList()">
+                            <option value="all">ทุกสถานะ</option>
+                            <option value="excellent">🌟 ทำได้ดีมาก (≥80%)</option>
+                            <option value="pass">👍 ผ่านเกณฑ์</option>
+                            <option value="fail">🤝 ควรเสริม (ไม่ผ่าน)</option>
+                        </select>
+                        <select id="stu-sort" class="bg-grayLight border border-transparent focus:bg-white focus:border-primary/30 text-slate-600 text-sm rounded-xl px-4 py-3 outline-none transition-all flex-1 md:flex-none cursor-pointer font-medium" onchange="renderStudentsList()">
+                            <option value="score-desc">คะแนน สูง → ต่ำ</option>
+                            <option value="score-asc">คะแนน ต่ำ → สูง</option>
+                            <option value="number-asc">เรียงตามเลขที่</option>
+                            <option value="name-asc">เรียงตามชื่อ ก-ฮ</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Table (Desktop) -->
+                <div class="bg-white rounded-2xl shadow-card border border-gray-50 overflow-hidden hidden md:block flex-1">
+                    <div class="overflow-x-auto h-full">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="sticky top-0 bg-grayLight z-10">
+                                <tr class="text-slate-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                                    <th class="p-4 font-bold w-16 text-center">เลขที่</th>
+                                    <th class="p-4 font-bold">นักเรียน</th>
+                                    <th class="p-4 font-bold text-center w-24">ห้อง</th>
+                                    <th class="p-4 font-bold text-center w-32">คะแนน</th>
+                                    <th class="p-4 font-bold text-center w-24">%</th>
+                                    <th class="p-4 font-bold text-left w-36">สถานะ</th>
+                                    <th class="p-4 font-bold text-center w-32"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="student-tbody" class="text-slate-700 divide-y divide-gray-50">
+                                <!-- Rendered via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Mobile Card List -->
+                <div id="student-mobile-list" class="grid grid-cols-1 gap-3 md:hidden pb-10">
+                    <!-- Rendered via JS -->
+                </div>
+            </div>
+
+            <!-- ================= VIEW: STUDENT DETAIL (INDIVIDUAL PROFILE) ================= -->
+            <div id="view-student-detail" class="view-section hidden fade-in max-w-5xl mx-auto space-y-6 pb-10">
+                
+                <!-- Nav -->
+                <div class="flex items-center justify-between">
+                    <button onclick="navigate('students')" class="flex items-center gap-2 text-slate-500 hover:text-primary font-medium transition-colors bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100">
+                        <i class="ph-bold ph-arrow-left"></i> กลับไปหน้ารายชื่อ
+                    </button>
+                    <div class="flex items-center gap-2 bg-white rounded-full shadow-sm border border-gray-100 p-1">
+                        <button onclick="navigateStudent(-1)" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-grayLight text-slate-600 transition-colors" title="คนก่อนหน้า"><i class="ph-bold ph-caret-left"></i></button>
+                        <button onclick="navigateStudent(1)" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-grayLight text-slate-600 transition-colors" title="คนถัดไป"><i class="ph-bold ph-caret-right"></i></button>
+                    </div>
+                </div>
+
+                <!-- Hero Profile -->
+                <div class="bg-white rounded-3xl p-6 md:p-10 shadow-card border border-gray-50 flex flex-col md:flex-row items-center justify-between gap-8 relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-r from-blue-50/50 to-transparent pointer-events-none"></div>
+                    
+                    <div class="flex items-center gap-6 relative z-10 w-full md:w-auto">
+                        <div id="sd-avatar" class="w-24 h-24 rounded-3xl flex items-center justify-center text-3xl font-bold shadow-soft">ออ</div>
+                        <div>
+                            <p id="sd-class-num" class="text-sm font-bold text-primary mb-1 uppercase tracking-wide">ม.5/1 • เลขที่ 14</p>
+                            <h2 id="sd-name" class="text-2xl md:text-3xl font-bold text-slate-800">นาย อัฟฎ็อล อาบูเล๊ะ</h2>
+                            <div class="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold" id="sd-badge">
+                                🌟 ทำได้ดีมาก
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="relative w-36 h-36 flex-shrink-0 z-10">
+                        <svg viewBox="0 0 120 120" class="w-full h-full drop-shadow-md">
+                            <circle class="text-gray-100" stroke-width="10" stroke="currentColor" fill="transparent" r="50" cx="60" cy="60"/>
+                            <circle id="sd-ring" class="text-primary progress-ring__circle" stroke-width="10" stroke-linecap="round" stroke="currentColor" fill="transparent" r="50" cx="60" cy="60" stroke-dasharray="314.16" stroke-dashoffset="0"/>
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span id="sd-score" class="text-3xl font-bold text-slate-800 tracking-tighter">0</span>
+                            <span class="text-xs text-slate-400 font-bold">จาก 50</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Smart Summary -->
+                <div class="bg-gradient-to-br from-primary/10 to-mint/10 p-5 rounded-2xl border border-primary/20 flex gap-4 items-start">
+                    <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-primary flex-shrink-0 shadow-sm"><i class="ph-fill ph-sparkle text-xl"></i></div>
+                    <div>
+                        <h4 class="font-bold text-slate-800 text-sm mb-1">สรุปข้อมูลจากระบบ</h4>
+                        <p id="sd-smart-summary" class="text-slate-600 leading-relaxed">...</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Left Col: Insights -->
+                    <div class="space-y-6">
+                        <div class="bg-white p-6 rounded-3xl shadow-card border border-gray-50">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="ph-fill ph-chart-polar text-purple"></i> ภาพรวมการทำข้อสอบ</h3>
+                            
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-center p-3 bg-mint/5 rounded-xl border border-mint/10">
+                                    <div class="flex items-center gap-2 text-mint font-semibold"><i class="ph-fill ph-check-circle"></i> ข้อที่ทำถูก</div>
+                                    <div class="text-xl font-bold text-mint" id="sd-correct">0</div>
+                                </div>
+                                <div class="flex justify-between items-center p-3 bg-coral/5 rounded-xl border border-coral/10">
+                                    <div class="flex items-center gap-2 text-coral font-semibold"><i class="ph-fill ph-warning-circle"></i> ควรทบทวน</div>
+                                    <div class="text-xl font-bold text-coral" id="sd-incorrect">0</div>
+                                </div>
+                                
+                                <div class="pt-4 border-t border-gray-100">
+                                    <p class="text-xs text-slate-500 font-medium mb-2">ตำแหน่งในห้อง <span id="sd-room-text">ม.X</span></p>
+                                    <div class="flex items-end justify-between mb-1">
+                                        <span class="text-2xl font-bold text-slate-800" id="sd-rank">#0</span>
+                                        <span class="text-sm text-slate-500" id="sd-rank-total">จาก 0 คน</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-gray-100 rounded-full mt-2 overflow-hidden">
+                                        <div id="sd-rank-bar" class="h-full bg-slate-300 rounded-full" style="width: 50%"></div>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 mt-2 text-right" id="sd-compare-avg">เทียบกับค่าเฉลี่ยห้อง</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Feedback Box -->
+                        <div id="sd-feedback-container" class="bg-pastel-lavender p-6 rounded-3xl shadow-sm border border-white/50 relative overflow-hidden">
+                            <i class="ph-fill ph-quotes text-5xl text-purple/10 absolute top-2 right-2"></i>
+                            <h3 class="font-bold text-purple mb-3 flex items-center gap-2 relative z-10"><i class="ph-fill ph-chat-teardrop-text"></i> สิ่งที่อยากบอกอุสตาส</h3>
+                            <p id="sd-feedback-text" class="text-slate-700 italic relative z-10 text-sm leading-relaxed whitespace-pre-line"></p>
+                        </div>
+                    </div>
+
+                    <!-- Right Col: Question Map -->
+                    <div class="md:col-span-2 space-y-6">
+                        <div class="bg-white p-6 rounded-3xl shadow-card border border-gray-50 flex flex-col h-full">
+                            <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                                <div>
+                                    <h3 class="font-bold text-slate-800 flex items-center gap-2"><i class="ph-fill ph-grid-four text-primary"></i> แผนที่คำตอบ (ข้อ 1-50)</h3>
+                                    <p class="text-xs text-slate-500 mt-1">กดที่ข้อสีแดงเพื่อดูรายละเอียดคำตอบที่ผิด</p>
+                                </div>
+                                <div class="flex gap-3 text-xs font-medium">
+                                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-mint"></span> ตอบถูก</span>
+                                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-coral"></span> ตอบผิด</span>
+                                </div>
+                            </div>
+
+                            <div id="sd-q-map" class="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-6 flex-1 content-start">
+                                <!-- Rendered via JS -->
+                            </div>
+
+                            <!-- Wrong Detail Box -->
+                            <div id="sd-wrong-detail" class="hidden bg-grayLight border border-gray-200 rounded-2xl p-5 slide-up">
+                                <div class="flex justify-between items-start mb-3">
+                                    <h4 class="font-bold text-slate-800" id="sd-wd-title">ข้อ X</h4>
+                                    <button onclick="closeWrongDetail()" class="text-slate-400 hover:text-slate-700"><i class="ph-bold ph-x"></i></button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-white p-3 rounded-xl border border-coral/20">
+                                        <p class="text-[10px] uppercase font-bold text-coral mb-1">คำตอบของนักเรียน</p>
+                                        <p class="font-bold text-slate-700 text-lg" id="sd-wd-student-ans">-</p>
+                                    </div>
+                                    <div class="bg-white p-3 rounded-xl border border-mint/20">
+                                        <p class="text-[10px] uppercase font-bold text-mint mb-1">เฉลยที่ถูกต้อง (อิงจากคนส่วนใหญ่)</p>
+                                        <p class="font-bold text-slate-700 text-lg" id="sd-wd-correct-ans">-</p>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-center">
+                                    <button onclick="jumpToQuestionAnalytics()" class="text-xs font-bold text-primary hover:underline inline-flex items-center gap-1">ดูวิเคราะห์ข้อนี้ของทั้งห้อง <i class="ph-bold ph-arrow-right"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: FEEDBACK (VOICES) ================= -->
+            <div id="view-feedback" class="view-section hidden fade-in max-w-7xl mx-auto min-h-screen">
+                
+                <!-- Hero -->
+                <div class="bg-gradient-to-r from-pastel-sky via-pastel-lavender to-pastel-pink p-8 md:p-12 rounded-[2rem] shadow-soft mb-8 relative overflow-hidden">
+                    <div class="absolute -top-10 -right-10 text-white/40 text-[15rem] leading-none pointer-events-none rotate-12"><i class="ph-fill ph-quotes"></i></div>
+                    
+                    <div class="relative z-10 max-w-2xl">
+                        <span class="inline-block px-4 py-1.5 bg-white/60 backdrop-blur-md rounded-full text-purple font-bold text-sm mb-4 border border-white">💬 เสียงจากห้องเรียน</span>
+                        <h2 class="text-3xl md:text-5xl font-bold text-slate-800 leading-tight mb-4">"วันนี้นักเรียน<br>อยากบอกอะไรเรา?"</h2>
+                        <p class="text-slate-600 text-lg">บางครั้งข้อมูลที่สำคัญที่สุด อาจไม่ได้อยู่ในรูปแบบของคะแนน</p>
+                        
+                        <div class="mt-8 flex gap-4">
+                            <div class="bg-white/80 backdrop-blur px-5 py-3 rounded-2xl border border-white">
+                                <div class="text-2xl font-bold text-slate-800" id="fb-total-count">0</div>
+                                <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">ข้อความทั้งหมด</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls & Filters -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 sticky top-16 z-20 bg-background/90 backdrop-blur-md py-4">
+                    
+                    <!-- Room Filter -->
+                    <div class="flex items-center gap-2 overflow-x-auto w-full md:w-auto hide-scroll pb-2 md:pb-0" id="fb-room-filters">
+                        <!-- Rendered via JS -->
+                    </div>
+
+                    <div class="flex items-center gap-3 w-full md:w-auto">
+                        <!-- Search -->
+                        <div class="relative flex-1 md:w-64 group">
+                            <i class="ph-bold ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors"></i>
+                            <input type="text" id="fb-search" placeholder="ค้นหาคำพูด..." class="w-full bg-white border border-gray-200 focus:border-primary rounded-xl py-2 pl-9 pr-4 text-sm outline-none transition-all shadow-sm" oninput="renderFeedbackWall()">
+                        </div>
+
+                        <!-- Privacy Toggle -->
+                        <div class="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex-shrink-0">
+                            <i class="ph-fill ph-eye-slash text-slate-400" id="fb-toggle-icon"></i>
+                            <span class="text-sm font-bold text-slate-700 select-none">ซ่อนชื่อ</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="fb-hide-names" class="sr-only peer" checked onchange="toggleFeedbackPrivacy()">
+                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Random Featured Voice -->
+                <div id="fb-random-container" class="mb-8 hidden">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="ph-fill ph-sparkle text-yellow text-xl"></i>
+                        <h3 class="font-bold text-slate-700">เสียงหนึ่งจากห้องวันนี้</h3>
+                        <button onclick="pickRandomFeedback()" class="ml-auto text-xs font-bold bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-grayLight flex items-center gap-1 transition-colors"><i class="ph-bold ph-arrows-clockwise"></i> สุ่มใหม่</button>
+                    </div>
+                    <div class="bg-white p-8 md:p-10 rounded-3xl shadow-card border border-gray-100 text-center relative cursor-pointer hover:shadow-soft transition-shadow" onclick="openStudentProfileFromFeedback(this.dataset.stuid)">
+                        <i class="ph-fill ph-quotes text-4xl text-gray-200 mb-4 inline-block"></i>
+                        <p id="fb-random-text" class="text-xl md:text-2xl font-medium text-slate-800 leading-relaxed max-w-3xl mx-auto">...</p>
+                        <p id="fb-random-author" class="mt-6 text-sm font-bold text-slate-400 tracking-wide uppercase">นักเรียน ม.5/1</p>
+                    </div>
+                </div>
+
+                <!-- Keywords Cloud -->
+                <div class="mb-10 bg-white p-6 rounded-3xl shadow-card border border-gray-50 hidden" id="fb-keyword-section">
+                    <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="ph-fill ph-hash text-sky"></i> คีย์เวิร์ดที่พบมากวันนี้</h3>
+                    <div id="fb-keyword-cloud" class="flex flex-wrap gap-2 justify-center py-2">
+                        <!-- Rendered via JS -->
+                    </div>
+                </div>
+
+                <!-- Masonry Wall -->
+                <div id="fb-empty-state" class="hidden text-center py-20">
+                    <div class="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6"><i class="ph-fill ph-chat-centered-text text-5xl text-slate-300"></i></div>
+                    <h3 class="text-xl font-bold text-slate-700 mb-2">วันนี้ยังเงียบอยู่ 😊</h3>
+                    <p class="text-slate-500">เมื่อนักเรียนฝากข้อความไว้ จะปรากฏขึ้นที่นี่</p>
+                </div>
+
+                <div id="fb-masonry-wall" class="masonry-grid pb-20">
+                    <!-- Cards Rendered via JS -->
+                </div>
+            </div>
+            
+            <!-- We keep the container for Report and other menus to not break existing navigation -->
+            <div id="view-report" class="view-section hidden fade-in space-y-6 max-w-5xl mx-auto">
+                <div class="no-print bg-white p-6 rounded-3xl shadow-card mb-8 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">📄 พิมพ์รายงาน</h2>
+                        <p class="text-slate-500 text-sm">เตรียมพร้อมสำหรับกระดาษ A4</p>
+                    </div>
+                    <button onclick="window.print()" class="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-primaryHover"><i class="ph-bold ph-printer"></i> พิมพ์ / PDF</button>
+                </div>
+                <div id="print-container" class="bg-white p-0 md:p-8 rounded-none md:rounded-3xl print-shadow-none text-slate-800"></div>
+            </div>
+
+            <!-- ================= VIEW: QUESTIONS ================= -->
+            <div id="view-questions" class="view-section hidden fade-in max-w-7xl mx-auto space-y-6">
+                <div class="bg-white p-5 rounded-3xl shadow-card border border-gray-50 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2"><i class="ph-fill ph-exam text-primary"></i> วิเคราะห์ข้อสอบ</h2>
+                        <p class="text-slate-500 text-sm mt-1">วิเคราะห์ความยากง่ายและการตอบของนักเรียนทั้ง 50 ข้อ</p>
+                    </div>
+                    <div class="flex gap-6">
+                        <div class="text-center"><div class="text-2xl font-bold text-slate-800">50</div><div class="text-[10px] uppercase font-bold text-slate-400">ข้อสอบทั้งหมด</div></div>
+                        <div class="w-px bg-gray-100"></div>
+                        <div class="text-center"><div class="text-2xl font-bold text-primary" id="q-avg-acc">0%</div><div class="text-[10px] uppercase font-bold text-slate-400">ความถูกต้องเฉลี่ย</div></div>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3 text-xs font-medium bg-white p-3 rounded-2xl shadow-sm border border-gray-50 flex-wrap justify-center">
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-emerald-500"></span> 80-100% (ง่าย)</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-blue-400"></span> 70-79%</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-yellow-400"></span> 60-69%</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-orange-400"></span> 50-59%</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-red-500"></span> <50% (ยาก)</span>
+                </div>
+
+                <div class="bg-white p-6 rounded-3xl shadow-card border border-gray-50">
+                    <div id="q-grid" class="grid grid-cols-5 md:grid-cols-10 gap-3">
+                        <!-- Rendered via JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: FOCUS ================= -->
+            <div id="view-focus" class="view-section hidden fade-in max-w-5xl mx-auto space-y-6">
+                 <div class="bg-gradient-to-r from-coral/10 to-orange-100 p-8 rounded-3xl shadow-sm border border-coral/20">
+                    <h2 class="text-3xl font-bold text-slate-800 flex items-center gap-3 mb-2"><i class="ph-fill ph-target text-coral"></i> จุดที่ควรทบทวน</h2>
+                    <p class="text-slate-600">TOP 5 ข้อสอบที่นักเรียนตอบผิดมากที่สุด เพื่อใช้วางแผนการสอนในคาบถัดไป</p>
+                </div>
+                <div id="focus-list" class="space-y-4 pb-10">
+                    <!-- Rendered via JS -->
+                </div>
+            </div>
+
+            <!-- ================= VIEW: INSIGHTS ================= -->
+            <div id="view-insights" class="view-section hidden fade-in max-w-7xl mx-auto space-y-6 pb-10">
+                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-3xl shadow-card border border-gray-50">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2"><i class="ph-fill ph-sparkle text-purple"></i> วิเคราะห์ห้องเรียน</h2>
+                        <p class="text-slate-500 text-sm mt-1">สรุปข้อมูลเชิงลึกแยกตามห้องเรียน</p>
+                    </div>
+                    <select id="insight-class-filter" class="bg-grayLight border border-transparent focus:bg-white focus:border-purple/30 text-slate-600 rounded-xl px-4 py-2 outline-none font-bold" onchange="renderInsightsMenu()">
+                        <!-- Rendered via JS -->
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-3xl shadow-card border border-gray-50">
+                        <h3 class="font-bold text-mint flex items-center gap-2 mb-4 text-lg"><i class="ph-fill ph-thumbs-up"></i> ทำได้ดีเยี่ยม (Accuracy > 80%)</h3>
+                        <div id="insight-good" class="space-y-2"></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl shadow-card border border-gray-50">
+                        <h3 class="font-bold text-coral flex items-center gap-2 mb-4 text-lg"><i class="ph-fill ph-warning-circle"></i> ต้องทบทวนด่วน (Accuracy < 50%)</h3>
+                        <div id="insight-bad" class="space-y-2"></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl shadow-card border border-gray-50">
+                        <h3 class="font-bold text-yellow flex items-center gap-2 mb-4 text-lg"><i class="ph-fill ph-users"></i> นักเรียนที่ควรติดตาม (ต่ำกว่าเกณฑ์)</h3>
+                        <div id="insight-students" class="space-y-3"></div>
+                    </div>
+                    <div class="bg-gradient-to-br from-purple/10 to-primary/10 p-6 rounded-3xl shadow-card border border-purple/20">
+                        <h3 class="font-bold text-purple flex items-center gap-2 mb-4 text-lg"><i class="ph-fill ph-lightbulb"></i> คำแนะนำสำหรับคาบต่อไป</h3>
+                        <p id="insight-action-text" class="text-slate-700 leading-relaxed text-lg font-medium"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: SETTINGS ================= -->
+            <div id="view-settings" class="view-section hidden fade-in max-w-3xl mx-auto space-y-6">
+                <div class="bg-white p-8 rounded-3xl shadow-card border border-gray-50">
+                    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2 mb-6"><i class="ph-fill ph-gear text-primary"></i> ตั้งค่าระบบ</h2>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-2">เกณฑ์การผ่าน (เปอร์เซ็นต์)</label>
+                            <div class="flex items-center gap-3">
+                                <input type="number" id="set-pass-percent" class="w-24 bg-grayLight border border-gray-200 rounded-xl px-4 py-2 font-bold text-center focus:border-primary outline-none" min="0" max="100" value="60">
+                                <span class="text-slate-500 font-medium">% (ค่าเริ่มต้น 60%)</span>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-2">ใช้สำหรับคำนวณสถานะนักเรียนในหน้าต่างๆ (ทำได้ดี, ผ่านเกณฑ์, ควรเสริม)</p>
+                        </div>
+                        
+                        <div class="pt-6 border-t border-gray-100">
+                            <label class="block text-sm font-bold text-slate-700 mb-2">ข้อมูลระบบ</label>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-gray-50 p-3 rounded-xl border border-gray-100"><span class="block text-xs text-slate-400">จำนวนข้อสอบที่อ่าน</span><span class="font-bold text-slate-700">50 ข้อ (คงที่)</span></div>
+                                <div class="bg-gray-50 p-3 rounded-xl border border-gray-100"><span class="block text-xs text-slate-400">แหล่งข้อมูล</span><span class="font-bold text-slate-700 text-xs truncate">Google Sheets</span></div>
+                            </div>
+                        </div>
+
+                        <div class="pt-6">
+                            <button onclick="saveSettings()" class="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-primaryHover transition-colors shadow-lg shadow-primary/20 w-full md:w-auto">บันทึกการตั้งค่า</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div> <!-- End Content Container -->
+    </main>
+
+    <!-- Backdrop -->
+    <div id="panel-backdrop" class="hidden fixed inset-0 overlay z-40 transition-opacity no-print" onclick="closeSidePanel()"></div>
+
+    <!-- Quick View Panel -->
+    <div id="panel-quickview" class="hidden fixed top-0 right-0 bottom-0 w-full sm:w-[400px] glass-panel shadow-2xl z-50 flex flex-col slide-in-right border-l border-white/60 no-print">
+        <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-white/50">
+            <h3 class="font-bold text-slate-800 text-lg">Quick View</h3>
+            <button onclick="closeSidePanel()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-grayLight text-slate-500"><i class="ph-bold ph-x text-lg"></i></button>
+        </div>
+        
+        <div class="p-6 bg-gradient-to-b from-blue-50/50 to-transparent flex flex-col items-center border-b border-gray-50">
+            <div id="qv-avatar" class="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold shadow-sm mb-4">ออ</div>
+            <h2 id="qv-name" class="text-xl font-bold text-slate-800 text-center mb-1">นาย ...</h2>
+            <p id="qv-class" class="text-sm font-bold text-slate-400 uppercase tracking-wide">ม.X/X • เลขที่ X</p>
+            
+            <div class="mt-6 flex w-full justify-between items-center px-4">
+                <div class="text-center">
+                    <div class="text-xs font-bold text-slate-400 uppercase">ตอบถูก</div>
+                    <div id="qv-correct" class="text-2xl font-bold text-mint">0</div>
+                </div>
+                <div class="relative w-28 h-28">
+                    <svg viewBox="0 0 120 120" class="w-full h-full drop-shadow-sm">
+                        <circle class="text-white" stroke-width="8" stroke="currentColor" fill="transparent" r="50" cx="60" cy="60"/>
+                        <circle id="qv-ring" class="text-primary progress-ring__circle" stroke-width="8" stroke-linecap="round" stroke="currentColor" fill="transparent" r="50" cx="60" cy="60" stroke-dasharray="314.16" stroke-dashoffset="0"/>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <span id="qv-score" class="text-xl font-bold text-slate-800">0/50</span>
+                        <span id="qv-percent" class="text-[10px] font-bold text-primary">0%</span>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <div class="text-xs font-bold text-slate-400 uppercase">ผิดพลาด</div>
+                    <div id="qv-incorrect" class="text-2xl font-bold text-coral">0</div>
+                </div>
+            </div>
+            <div id="qv-badge" class="mt-6 px-4 py-1.5 rounded-full text-sm font-bold bg-gray-100">สถานะ</div>
+        </div>
+        
+        <div class="flex-1 p-6 flex flex-col justify-end bg-white">
+            <button id="qv-btn-profile" class="w-full py-4 bg-primary text-white rounded-2xl font-bold text-lg hover:bg-primaryHover transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2 group">
+                ดูข้อมูลรายบุคคล <i class="ph-bold ph-arrow-right group-hover:translate-x-1 transition-transform"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Question Detail Panel -->
+    <div id="panel-question" class="hidden fixed top-0 right-0 bottom-0 w-full sm:w-[450px] glass-panel shadow-2xl z-50 flex flex-col slide-in-right border-l border-white/60 no-print">
+        <div class="p-4 border-b border-gray-100 flex items-center justify-between bg-white/50">
+            <h3 class="font-bold text-slate-800 text-lg">วิเคราะห์ข้อสอบรายข้อ</h3>
+            <button onclick="closeSidePanel()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-grayLight text-slate-500"><i class="ph-bold ph-x text-lg"></i></button>
+        </div>
+        
+        <div class="p-6 bg-gradient-to-b from-gray-50 to-white flex-1 overflow-y-auto">
+            <div class="flex items-center justify-between mb-6">
+                <div class="w-16 h-16 rounded-2xl bg-primary text-white flex items-center justify-center text-2xl font-bold shadow-md" id="pq-num">1</div>
+                <div class="text-right">
+                    <div class="text-3xl font-bold text-slate-800" id="pq-acc">0%</div>
+                    <div class="text-xs font-bold text-slate-400 uppercase tracking-wide">ความถูกต้อง</div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm mb-6">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-slate-400 uppercase">เฉลยที่ถูกต้อง</span>
+                    <span class="text-xs text-slate-400">(ประเมินจากคนส่วนใหญ่)</span>
+                </div>
+                <div class="text-2xl font-bold text-mint flex items-center gap-2"><i class="ph-fill ph-check-circle"></i> <span id="pq-correct-ans">-</span></div>
+            </div>
+
+            <h4 class="font-bold text-slate-700 mb-3 text-sm">การกระจายตัวของคำตอบ</h4>
+            <div id="pq-choices" class="space-y-3 mb-8">
+                <!-- Rendered via JS -->
+            </div>
+
+            <h4 class="font-bold text-coral mb-3 text-sm flex items-center gap-2"><i class="ph-fill ph-warning-circle"></i> นักเรียนที่ตอบผิด (<span id="pq-wrong-count">0</span> คน)</h4>
+            <div id="pq-wrong-students" class="space-y-2">
+                <!-- Rendered via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Navigation -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around items-center h-16 z-30 pb-safe no-print shadow-[0_-5px_20px_rgba(0,0,0,0.03)]">
+        <button onclick="navigate('home')" class="nav-btn w-full h-full flex flex-col items-center justify-center text-slate-400 active text-primary" data-view="home">
+            <i class="ph-fill ph-squares-four text-2xl mb-1"></i><span class="text-[10px] font-bold">ภาพรวม</span>
+        </button>
+        <button onclick="navigate('students')" class="nav-btn w-full h-full flex flex-col items-center justify-center text-slate-400" data-view="students">
+            <i class="ph-fill ph-users text-2xl mb-1"></i><span class="text-[10px] font-bold">นักเรียน</span>
+        </button>
+        <button onclick="navigate('feedback')" class="nav-btn w-full h-full flex flex-col items-center justify-center text-slate-400" data-view="feedback">
+            <i class="ph-fill ph-chat-teardrop-text text-2xl mb-1"></i><span class="text-[10px] font-bold">เสียง</span>
+        </button>
+        <button onclick="navigate('report')" class="nav-btn w-full h-full flex flex-col items-center justify-center text-slate-400" data-view="report">
+            <i class="ph-fill ph-printer text-2xl mb-1"></i><span class="text-[10px] font-bold">พิมพ์</span>
+        </button>
+    </nav>
+
+    <script>
+        const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1HrfzW_t9J-4RRrJbV7SXuwXZfblXCwyN28FTiiFwiKg/gviz/tq?tqx=out:csv';
+        const TOTAL_QUESTIONS = 50; 
+        
+        // Pastel colors for Avatar & Feedback
+        const pastelColors = ['bg-pastel-mint text-emerald-700', 'bg-pastel-sky text-sky-700', 'bg-pastel-lavender text-purple-700', 'bg-pastel-peach text-orange-700', 'bg-pastel-pink text-pink-700', 'bg-pastel-yellow text-yellow-700'];
+        const cardBgColors = ['bg-pastel-mint', 'bg-pastel-sky', 'bg-pastel-lavender', 'bg-pastel-peach', 'bg-pastel-pink', 'bg-pastel-yellow'];
+
+        const appState = {
+            raw: [],
+            students: [], 
+            questions: [], 
+            classrooms: [],
+            currentFilterClass: 'all',
+            currentStudentIndex: 0,
+            filteredStudentsList: [],
+            currentViewingQuestion: null,
+            settings: {
+                passPercent: 60
+            },
+            
+            async init() {
+                const saved = localStorage.getItem('akhlaq_settings');
+                if(saved) this.settings = JSON.parse(saved);
+                await this.refreshData();
+            },
+
+            async refreshData() {
+                document.getElementById('loading-screen').classList.remove('hidden');
+                document.getElementById('error-screen').classList.add('hidden');
+                try {
+                    const response = await fetch(SHEET_URL);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const csvText = await response.text();
+                    this.raw = parseCSV(csvText);
+                    
+                    if (this.raw.length < 2) throw new Error('No data found in sheet');
+                    
+                    this.processData();
+                    
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    const now = new Date();
+                    document.getElementById('last-update').innerText = `อัปเดต: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                    
+                    // Route to initial view or stay on current
+                    const activeBtn = document.querySelector('.nav-btn.active');
+                    const viewToLoad = activeBtn ? activeBtn.dataset.view : 'students'; // Default to students for this demo
+                    navigate(viewToLoad, true);
+
+                } catch (error) {
+                    console.error("Fetch Error:", error);
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    document.getElementById('error-screen').classList.remove('hidden');
+                }
+            },
+
+            processData() {
+                const rows = this.raw.slice(1);
+                this.students = [];
+                let classSet = new Set();
+                
+                rows.forEach((row, rowIndex) => {
+                    // Strict 0-based indexing as requested
+                    let scoreRaw = String(row[1] || "0").split('/')[0].trim();
+                    let numScore = parseFloat(scoreRaw) || 0;
+                    if(numScore > TOTAL_QUESTIONS) numScore = TOTAL_QUESTIONS;
+
+                    let prefix = (row[2] || "").trim();
+                    let fName = (row[3] || "").trim();
+                    let lName = (row[4] || "").trim();
+                    let fullName = `${prefix} ${fName} ${lName}`.trim().replace(/\s+/g, ' ');
+                    
+                    if(!fName && !lName) return; // Skip empty rows
+
+                    let classroom = (row[5] || "-").trim();
+                    classSet.add(classroom);
+
+                    let percent = (numScore / TOTAL_QUESTIONS) * 100;
+                    
+                    // Answers from H(7) to BE(56) = 50 items
+                    let answers = row.slice(7, 57).map(a => (a||'-').trim());
+                    // Ensure exactly 50
+                    while(answers.length < TOTAL_QUESTIONS) answers.push('-');
+                    if(answers.length > TOTAL_QUESTIONS) answers = answers.slice(0, TOTAL_QUESTIONS);
+
+                    // Feedback BF(57)
+                    let rawFeedback = (row[57] || "").trim();
+                    let feedback = (rawFeedback && rawFeedback !== "-" && rawFeedback.toLowerCase() !== "ไม่มี") ? rawFeedback : "";
+
+                    // Setup Avatar Initial
+                    let initial = (fName.charAt(0) + (lName.charAt(0) || '')).toUpperCase();
+                    if(!initial) initial = 'ออ'; // fallback
+
+                    this.students.push({
+                        id: `stu_${rowIndex}`,
+                        timestamp: row[0],
+                        score: numScore,
+                        percentage: percent,
+                        prefix: prefix,
+                        firstName: fName,
+                        lastName: lName,
+                        fullName: fullName,
+                        initial: initial,
+                        avatarColor: pastelColors[rowIndex % pastelColors.length],
+                        classroom: classroom,
+                        number: parseInt(row[6]) || 0,
+                        answers: answers,
+                        correctCount: numScore,
+                        incorrectCount: TOTAL_QUESTIONS - numScore,
+                        feedback: feedback,
+                        statusObj: this.getStatusObj(percent)
+                    });
+                });
+
+                // Sort classes for filter
+                this.classrooms = Array.from(classSet).sort();
+                
+                // --- Analytics Logic (Infer Keys) ---
+                this.inferAnswerKeys();
+
+                console.log(`✅ Loaded ${this.students.length} students across ${this.classrooms.length} classes.`);
+            },
+
+            inferAnswerKeys() {
+                this.questions = [];
+                let sortedByScore = [...this.students].sort((a,b) => b.score - a.score);
+                let topGroup = sortedByScore.slice(0, Math.max(1, Math.floor(this.students.length * 0.25)));
+
+                for(let i=0; i<TOTAL_QUESTIONS; i++) {
+                    let topAnsCount = {};
+                    topGroup.forEach(s => {
+                        let ans = s.answers[i];
+                        if(ans !== '-' && ans !== '') topAnsCount[ans] = (topAnsCount[ans] || 0) + 1;
+                    });
+                    
+                    let bestAns = '-';
+                    let max = 0;
+                    for(let k in topAnsCount) { if(topAnsCount[k] > max) { max = topAnsCount[k]; bestAns = k; } }
+                    
+                    // Full analysis for all students
+                    let correctCount = 0;
+                    let incorrectCount = 0;
+                    let choices = {};
+                    let wrongStudents = [];
+
+                    this.students.forEach(s => {
+                        let ans = s.answers[i];
+                        if(ans !== '') choices[ans] = (choices[ans] || 0) + 1;
+                        
+                        if(ans === bestAns) {
+                            correctCount++;
+                        } else {
+                            incorrectCount++;
+                            wrongStudents.push({ id: s.id, name: s.fullName, ans: ans, room: s.classroom, num: s.number });
+                        }
+                    });
+
+                    let accuracy = this.students.length > 0 ? (correctCount / this.students.length) * 100 : 0;
+
+                    this.questions.push({ 
+                        number: i+1, 
+                        correctAnswer: bestAns,
+                        correctCount: correctCount,
+                        incorrectCount: incorrectCount,
+                        accuracy: accuracy,
+                        choices: choices,
+                        wrongStudents: wrongStudents
+                    });
+                }
+            },
+
+            getStatusObj(percent) {
+                const pass = this.settings.passPercent;
+                if(percent >= 80) return { label: '🌟 ทำได้ดีมาก', color: 'bg-mint/20 text-emerald-800', border: 'border-mint/30', type: 'excellent' };
+                if(percent >= pass) return { label: '👍 ผ่านเกณฑ์', color: 'bg-primary/10 text-primary', border: 'border-primary/20', type: 'pass' };
+                if(percent >= pass - 20) return { label: '🌱 กำลังพัฒนา', color: 'bg-yellow/20 text-yellow-800', border: 'border-yellow/30', type: 'fail' };
+                return { label: '🤝 ควรเสริม', color: 'bg-coral/10 text-red-700', border: 'border-coral/20', type: 'fail' };
+            }
+        };
+
+        // CSV Parser
+        function parseCSV(text) {
+            let result = [], row = [], inQuotes = false, start = 0;
+            for (let i = 0; i < text.length; i++) {
+                if (text[i] === '"') inQuotes = !inQuotes;
+                else if (text[i] === ',' && !inQuotes) {
+                    row.push(text.substring(start, i).replace(/^"|"$/g, '').replace(/""/g, '"'));
+                    start = i + 1;
+                } else if (text[i] === '\n' && !inQuotes) {
+                    let end = (text[i-1] === '\r') ? i - 1 : i;
+                    row.push(text.substring(start, end).replace(/^"|"$/g, '').replace(/""/g, '"'));
+                    result.push(row); row = []; start = i + 1;
+                }
+            }
+            if (start < text.length) {
+                row.push(text.substring(start).trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+                result.push(row);
+            }
+            return result;
+        }
+
+        // Navigation
+        function navigate(viewId, forceRender = false) {
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if(btn.dataset.view === viewId) {
+                    btn.classList.add('active', 'text-primary');
+                    if(btn.parentElement.tagName === 'NAV' && !btn.parentElement.classList.contains('fixed')) btn.classList.add('bg-blue-50');
+                    btn.classList.remove('text-slate-500', 'text-slate-400');
+                } else {
+                    btn.classList.remove('active', 'text-primary', 'bg-blue-50');
+                    if(btn.parentElement.tagName === 'NAV' && !btn.parentElement.classList.contains('fixed')) btn.classList.add('text-slate-500');
+                    else btn.classList.add('text-slate-400');
+                }
+            });
+
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            
+            // Special handling: if going to students, reset to list view, not detail view
+            let targetId = `view-${viewId}`;
+            if(viewId === 'students' && !forceRender && document.getElementById('view-student-detail').classList.contains('fade-in')) {
+                // Keep it on detail if returning via browser back? No, just force to list for simplicity
+                targetId = 'view-students';
+            }
+
+            const targetView = document.getElementById(targetId);
+            if(targetView) {
+                targetView.classList.remove('hidden');
+                targetView.classList.remove('fade-in');
+                void targetView.offsetWidth; // Trigger reflow
+                targetView.classList.add('fade-in');
+            }
+
+            // Render triggers
+            if(viewId === 'home' || targetId === 'view-home') renderHomeMenu();
+            if(viewId === 'students' || targetId === 'view-students') renderStudentsMenu();
+            if(viewId === 'feedback') renderFeedbackMenu();
+            if(viewId === 'questions') renderQuestionsMenu();
+            if(viewId === 'focus') renderFocusMenu();
+            if(viewId === 'insights') renderInsightsMenu(true);
+            if(viewId === 'settings') renderSettingsMenu();
+            if(viewId === 'report') renderReportMenu();
+        }
+
+        // ================= STUDENTS LOGIC =================
+        function renderStudentsMenu() {
+            if(!appState.students.length) return; // Need data
+
+            // Render Class Filters
+            const filterContainer = document.getElementById('classroom-filters');
+            filterContainer.innerHTML = '';
+            
+            // "All" button
+            filterContainer.appendChild(createClassChip('all', 'ทุกห้อง', appState.currentFilterClass === 'all'));
+            // Class buttons
+            appState.classrooms.forEach(c => {
+                filterContainer.appendChild(createClassChip(c, `ม.${c}`, appState.currentFilterClass === c));
+            });
+
+            renderStudentsList();
+        }
+
+        function createClassChip(val, label, isActive) {
+            const btn = document.createElement('button');
+            btn.className = `px-5 py-2 rounded-full font-bold text-sm transition-all shadow-sm border ${isActive ? 'bg-primary text-white border-primary shadow-primary/20 scale-105' : 'bg-white text-slate-600 border-gray-100 hover:bg-grayLight hover:text-primary'}`;
+            btn.innerText = label;
+            btn.onclick = () => {
+                appState.currentFilterClass = val;
+                renderStudentsMenu(); // Re-render chips and list
+            };
+            return btn;
+        }
+
+        function renderStudentsList() {
+            const search = document.getElementById('stu-search').value.toLowerCase();
+            const statusFilter = document.getElementById('stu-filter-status').value;
+            const sortMethod = document.getElementById('stu-sort').value;
+
+            // Filter
+            let list = appState.students.filter(s => {
+                if(appState.currentFilterClass !== 'all' && s.classroom !== appState.currentFilterClass) return false;
+                if(search && !s.fullName.toLowerCase().includes(search) && !s.number.toString().includes(search)) return false;
+                if(statusFilter !== 'all' && s.statusObj.type !== statusFilter) return false;
+                return true;
+            });
+
+            // Update Summary Bar based on Filtered List
+            document.getElementById('stu-sum-total').innerText = list.length;
+            let sumScore = list.reduce((acc, s) => acc + s.score, 0);
+            document.getElementById('stu-sum-avg').innerText = list.length ? (sumScore / list.length).toFixed(1) : 0;
+            let passCount = list.filter(s => s.percentage >= 60).length;
+            document.getElementById('stu-sum-pass').innerText = list.length ? Math.round((passCount / list.length)*100) + '%' : '0%';
+
+            // Sort
+            list.sort((a,b) => {
+                if(sortMethod === 'score-desc') return b.score - a.score;
+                if(sortMethod === 'score-asc') return a.score - b.score;
+                if(sortMethod === 'number-asc') return a.number - b.number;
+                if(sortMethod === 'name-asc') return a.firstName.localeCompare(b.firstName);
+            });
+
+            appState.filteredStudentsList = list; // Save for prev/next
+
+            // Render Table (Desktop)
+            const tbody = document.getElementById('student-tbody');
+            const mobileList = document.getElementById('student-mobile-list');
+            tbody.innerHTML = ''; mobileList.innerHTML = '';
+
+            if(list.length === 0) {
+                const emptyHTML = `<tr><td colspan="7" class="p-10 text-center text-slate-400 font-medium bg-white">ไม่พบข้อมูลนักเรียนที่ค้นหา</td></tr>`;
+                tbody.innerHTML = emptyHTML;
+                mobileList.innerHTML = `<div class="p-8 text-center text-slate-400 bg-white rounded-2xl border border-gray-100">ไม่พบข้อมูล</div>`;
+                return;
+            }
+
+            list.forEach((s, index) => {
+                // Desktop Row
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-blue-50/40 transition-colors group border-b border-gray-50 last:border-0";
+                tr.innerHTML = `
+                    <td class="p-4 text-center font-medium text-slate-400 group-hover:text-primary transition-colors">${s.number || '-'}</td>
+                    <td class="p-4 cursor-pointer" onclick="openStudentQuickView('${s.id}')">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl ${s.avatarColor} flex items-center justify-center font-bold text-sm shadow-sm">${s.initial}</div>
+                            <span class="font-bold text-slate-800 group-hover:text-primary transition-colors">${s.fullName}</span>
+                        </div>
+                    </td>
+                    <td class="p-4 text-center text-slate-500 font-medium">ม.${s.classroom}</td>
+                    <td class="p-4 text-center">
+                        <span class="font-bold text-slate-700 text-lg">${s.score}</span><span class="text-xs text-slate-400">/50</span>
+                    </td>
+                    <td class="p-4 text-center font-bold text-slate-600">${s.percentage.toFixed(0)}%</td>
+                    <td class="p-4 text-left">
+                        <span class="px-3 py-1.5 rounded-lg text-xs font-bold border ${s.statusObj.color} ${s.statusObj.border}">${s.statusObj.label}</span>
+                    </td>
+                    <td class="p-4 text-center">
+                        <button onclick="openStudentProfile('${s.id}')" class="text-sm font-bold text-primary hover:text-primaryHover bg-white border border-primary/20 hover:bg-primary/5 px-4 py-1.5 rounded-full transition-all">ดูข้อมูล &rarr;</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                // Mobile Card
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3 active:scale-[0.98] transition-transform cursor-pointer";
+                card.onclick = () => openStudentQuickView(s.id);
+                card.innerHTML = `
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl ${s.avatarColor} flex items-center justify-center font-bold text-lg shadow-sm">${s.initial}</div>
+                            <div>
+                                <h4 class="font-bold text-slate-800 leading-tight line-clamp-1">${s.fullName}</h4>
+                                <p class="text-xs text-slate-400 font-medium mt-0.5">เลขที่ ${s.number} • ม.${s.classroom}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold text-slate-800 text-lg leading-none">${s.score}<span class="text-[10px] text-slate-400 font-normal">/50</span></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between pt-3 border-t border-gray-50">
+                        <span class="px-2.5 py-1 rounded-md text-[10px] font-bold border ${s.statusObj.color} ${s.statusObj.border}">${s.statusObj.label}</span>
+                        <span class="text-[10px] font-bold text-primary flex items-center gap-1">ดูข้อมูล <i class="ph-bold ph-caret-right"></i></span>
+                    </div>
+                `;
+                mobileList.appendChild(card);
+            });
+        }
+
+        function openStudentQuickView(studentId) {
+            const student = appState.students.find(s => s.id === studentId);
+            if(!student) return;
+
+            document.getElementById('panel-backdrop').classList.remove('hidden');
+            const panel = document.getElementById('panel-quickview');
+            panel.classList.remove('hidden');
+
+            document.getElementById('qv-avatar').className = `w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold shadow-sm mb-4 ${student.avatarColor}`;
+            document.getElementById('qv-avatar').innerText = student.initial;
+            document.getElementById('qv-name').innerText = student.fullName;
+            document.getElementById('qv-class').innerText = `ม.${student.classroom} • เลขที่ ${student.number}`;
+            
+            document.getElementById('qv-score').innerText = `${student.score}/50`;
+            document.getElementById('qv-percent').innerText = `${student.percentage.toFixed(0)}%`;
+            document.getElementById('qv-correct').innerText = student.correctCount;
+            document.getElementById('qv-incorrect').innerText = student.incorrectCount;
+            
+            const badge = document.getElementById('qv-badge');
+            badge.className = `mt-6 px-4 py-1.5 rounded-full text-sm font-bold border ${student.statusObj.color} ${student.statusObj.border}`;
+            badge.innerText = student.statusObj.label;
+
+            const circle = document.getElementById('qv-ring');
+            const circumference = 314.16; // 2 * pi * 50
+            circle.style.strokeDashoffset = circumference;
+            setTimeout(() => { circle.style.strokeDashoffset = circumference - (student.percentage / 100) * circumference; }, 50);
+
+            // Bind button to full profile
+            document.getElementById('qv-btn-profile').onclick = () => {
+                closeSidePanel();
+                openStudentProfile(studentId);
+            };
+        }
+
+        function closeSidePanel() {
+            document.getElementById('panel-backdrop').classList.add('hidden');
+            document.getElementById('panel-quickview').classList.add('hidden');
+            document.getElementById('panel-question').classList.add('hidden');
+            closeWrongDetail();
+        }
+
+        function openStudentProfile(studentId) {
+            const student = appState.students.find(s => s.id === studentId);
+            if(!student) return;
+
+            // Update current index for Prev/Next
+            appState.currentStudentIndex = appState.filteredStudentsList.findIndex(s => s.id === studentId);
+
+            // Switch View
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            const view = document.getElementById('view-student-detail');
+            view.classList.remove('hidden', 'fade-in'); void view.offsetWidth; view.classList.add('fade-in');
+
+            // --- Fill Data ---
+            // Hero
+            document.getElementById('sd-avatar').className = `w-24 h-24 rounded-3xl flex items-center justify-center text-3xl font-bold shadow-soft ${student.avatarColor}`;
+            document.getElementById('sd-avatar').innerText = student.initial;
+            document.getElementById('sd-name').innerText = student.fullName;
+            document.getElementById('sd-class-num').innerText = `ม.${student.classroom} • เลขที่ ${student.number}`;
+            document.getElementById('sd-badge').className = `mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold border ${student.statusObj.color} ${student.statusObj.border}`;
+            document.getElementById('sd-badge').innerHTML = student.statusObj.label;
+            
+            document.getElementById('sd-score').innerText = student.score;
+            const circle = document.getElementById('sd-ring');
+            const circumference = 314.16;
+            circle.style.strokeDashoffset = circumference;
+            setTimeout(() => { circle.style.strokeDashoffset = circumference - (student.percentage / 100) * circumference; }, 100);
+
+            // Insights
+            document.getElementById('sd-correct').innerText = student.correctCount;
+            document.getElementById('sd-incorrect').innerText = student.incorrectCount;
+
+            // Class Compare Math
+            const classMates = appState.students.filter(s => s.classroom === student.classroom);
+            classMates.sort((a,b) => b.score - a.score); // Rank
+            const rank = classMates.findIndex(s => s.id === student.id) + 1;
+            const classAvg = classMates.reduce((acc, s) => acc + s.score, 0) / classMates.length;
+            const diff = (student.score - classAvg).toFixed(1);
+            const diffText = diff > 0 ? `สูงกว่าเฉลี่ย +${diff}` : (diff < 0 ? `ต่ำกว่าเฉลี่ย ${diff}` : `เท่ากับค่าเฉลี่ยห้อง`);
+
+            document.getElementById('sd-room-text').innerText = `ม.${student.classroom}`;
+            document.getElementById('sd-rank').innerText = `#${rank}`;
+            document.getElementById('sd-rank-total').innerText = `จาก ${classMates.length} คน`;
+            document.getElementById('sd-compare-avg').innerText = `${diffText} (เฉลี่ย ${classAvg.toFixed(1)})`;
+            
+            // Reverse rank bar (rank 1 = 100% full)
+            let rankPercent = ((classMates.length - rank + 1) / classMates.length) * 100;
+            document.getElementById('sd-rank-bar').style.width = `${rankPercent}%`;
+            document.getElementById('sd-rank-bar').className = `h-full rounded-full transition-all duration-1000 ${student.statusObj.color.split(' ')[0].replace('/20', '').replace('/10', '')}`; // Extract pure bg color
+
+            // Smart Summary
+            let summaryTxt = `${student.firstName} ทำข้อสอบได้คะแนน ${student.score} คะแนน คิดเป็น ${student.percentage.toFixed(0)}% `;
+            if(student.score >= classAvg) summaryTxt += `ซึ่งอยู่ในระดับสูงกว่าค่าเฉลี่ยของห้อง ปัจจุบันจัดอยู่ในกลุ่ม ${student.statusObj.label.substring(2)} `;
+            else summaryTxt += `ปัจจุบันอยู่ในกลุ่ม ${student.statusObj.label.substring(2)} `;
+            
+            if(student.incorrectCount > 0) summaryTxt += `โดยมี ${student.incorrectCount} ข้อที่แนะนำให้กลับไปทบทวนเพิ่มเติม`;
+            else summaryTxt += `และทำได้ถูกต้องสมบูรณ์แบบทุกข้อ! มาชาอัลลอฮฺ`;
+            
+            document.getElementById('sd-smart-summary').innerText = summaryTxt;
+
+            // Feedback 
+            const fbBox = document.getElementById('sd-feedback-container');
+            if(student.feedback) {
+                fbBox.classList.remove('hidden');
+                document.getElementById('sd-feedback-text').innerText = `"${student.feedback}"`;
+            } else {
+                fbBox.classList.add('hidden');
+            }
+
+            // Question Map (1-50)
+            const qMap = document.getElementById('sd-q-map');
+            qMap.innerHTML = '';
+            
+            for(let i=0; i<TOTAL_QUESTIONS; i++) {
+                const qNum = i + 1;
+                const stuAns = student.answers[i];
+                const correctAns = appState.questions[i].correctAnswer;
+                const isCorrect = (stuAns === correctAns);
+                
+                const btn = document.createElement('button');
+                btn.className = `w-full aspect-square flex items-center justify-center rounded-xl text-sm font-bold transition-all ${isCorrect ? 'bg-mint/10 text-mint border border-mint/20 cursor-default' : 'bg-coral text-white border-b-4 border-coral-dark hover:brightness-110 active:border-b-0 active:translate-y-1 shadow-sm'}`;
+                btn.innerText = qNum.toString().padStart(2, '0');
+                
+                if(!isCorrect) {
+                    btn.onclick = () => showWrongDetail(qNum, stuAns, correctAns);
+                }
+                qMap.appendChild(btn);
+            }
+            closeWrongDetail();
+        }
+
+        function navigateStudent(direction) {
+            let newIndex = appState.currentStudentIndex + direction;
+            if(newIndex < 0) newIndex = appState.filteredStudentsList.length - 1;
+            if(newIndex >= appState.filteredStudentsList.length) newIndex = 0;
+            
+            const nextStudent = appState.filteredStudentsList[newIndex];
+            if(nextStudent) openStudentProfile(nextStudent.id);
+        }
+
+        function showWrongDetail(qNum, stuAns, correctAns) {
+            const box = document.getElementById('sd-wrong-detail');
+            box.classList.remove('hidden');
+            document.getElementById('sd-wd-title').innerText = `ข้อ ${qNum}`;
+            document.getElementById('sd-wd-student-ans').innerText = stuAns;
+            document.getElementById('sd-wd-correct-ans').innerText = correctAns;
+            appState.currentViewingQuestion = qNum; // Store for jump
+        }
+
+        function closeWrongDetail() {
+            document.getElementById('sd-wrong-detail').classList.add('hidden');
+        }
+        function jumpToQuestionAnalytics() {
+            // Placeholder for integration with full analytics
+            navigate('questions');
+            setTimeout(() => { alert(`กระโดดไปวิเคราะห์ข้อ ${appState.currentViewingQuestion}`); }, 300);
+        }
+
+        // ================= FEEDBACK LOGIC =================
+        function renderFeedbackMenu() {
+            // Render Room Filters
+            const filterContainer = document.getElementById('fb-room-filters');
+            filterContainer.innerHTML = '';
+            filterContainer.appendChild(createFeedbackClassChip('all', 'ทุกห้อง', appState.currentFilterClass === 'all'));
+            appState.classrooms.forEach(c => {
+                filterContainer.appendChild(createFeedbackClassChip(c, `ม.${c}`, appState.currentFilterClass === c));
+            });
+
+            renderFeedbackWall();
+        }
+
+        function createFeedbackClassChip(val, label, isActive) {
+            const btn = document.createElement('button');
+            btn.className = `px-5 py-2 rounded-full font-bold text-sm transition-all border whitespace-nowrap flex-shrink-0 ${isActive ? 'bg-purple text-white border-purple shadow-sm' : 'bg-white text-slate-600 border-gray-200 hover:bg-grayLight'}`;
+            btn.innerText = label;
+            btn.onclick = () => {
+                appState.currentFilterClass = val;
+                renderFeedbackMenu();
+            };
+            return btn;
+        }
+
+        function toggleFeedbackPrivacy() {
+            const isHidden = document.getElementById('fb-hide-names').checked;
+            const icon = document.getElementById('fb-toggle-icon');
+            if(isHidden) { icon.classList.replace('ph-eye', 'ph-eye-slash'); icon.classList.replace('text-primary', 'text-slate-400'); }
+            else { icon.classList.replace('ph-eye-slash', 'ph-eye'); icon.classList.replace('text-slate-400', 'text-primary'); }
+            renderFeedbackWall();
+        }
+
+        function renderFeedbackWall() {
+            const search = document.getElementById('fb-search').value.toLowerCase();
+            const hideNames = document.getElementById('fb-hide-names').checked;
+            
+            let feedbacks = appState.students.filter(s => {
+                if(!s.feedback) return false;
+                if(appState.currentFilterClass !== 'all' && s.classroom !== appState.currentFilterClass) return false;
+                if(search && !s.feedback.toLowerCase().includes(search) && !s.fullName.toLowerCase().includes(search)) return false;
+                return true;
+            });
+
+            document.getElementById('fb-total-count').innerText = feedbacks.length;
+
+            const wall = document.getElementById('fb-masonry-wall');
+            const empty = document.getElementById('fb-empty-state');
+            wall.innerHTML = '';
+
+            if(feedbacks.length === 0) {
+                wall.classList.add('hidden'); empty.classList.remove('hidden');
+                document.getElementById('fb-random-container').classList.add('hidden');
+                document.getElementById('fb-keyword-section').classList.add('hidden');
+                return;
+            }
+
+            wall.classList.remove('hidden'); empty.classList.add('hidden');
+            
+            // Random Voice section
+            document.getElementById('fb-random-container').classList.remove('hidden');
+            pickRandomFeedback(feedbacks);
+
+            // Keyword Cloud
+            generateWordCloud(feedbacks);
+
+            // Masonry Items
+            feedbacks.forEach((s, index) => {
+                const cardColor = cardBgColors[(index * 3 + 7) % cardBgColors.length]; // Pseudo-random distribute
+                const authorText = hideNames ? `นักเรียน ม.${s.classroom}` : `${s.firstName} • ม.${s.classroom}`;
+                
+                const div = document.createElement('div');
+                div.className = `masonry-item ${cardColor} p-6 md:p-8 rounded-[2rem] shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md transition-shadow`;
+                div.onclick = () => openStudentProfileFromFeedback(s.id);
+                div.innerHTML = `
+                    <i class="ph-fill ph-quotes text-5xl opacity-10 absolute top-4 left-4 pointer-events-none group-hover:scale-110 transition-transform"></i>
+                    <p class="text-slate-700 font-medium relative z-10 leading-relaxed whitespace-pre-line text-lg mb-6 pt-2">"${s.feedback}"</p>
+                    <div class="flex items-center gap-2 relative z-10 opacity-70">
+                        <div class="w-6 h-6 rounded-full bg-white/50 flex items-center justify-center text-[10px] font-bold text-slate-600">${hideNames ? '<i class="ph-fill ph-mask-happy"></i>' : s.initial}</div>
+                        <span class="text-xs font-bold text-slate-600 uppercase tracking-wide">${authorText}</span>
+                    </div>
+                `;
+                wall.appendChild(div);
+            });
+        }
+
+        function pickRandomFeedback(list = null) {
+            // If list not provided, compute it
+            if(!list) {
+                list = appState.students.filter(s => s.feedback && (appState.currentFilterClass === 'all' || s.classroom === appState.currentFilterClass));
+            }
+            if(!list.length) return;
+            
+            const rand = list[Math.floor(Math.random() * list.length)];
+            document.getElementById('fb-random-text').innerText = `"${rand.feedback}"`;
+            
+            const hideNames = document.getElementById('fb-hide-names').checked;
+            document.getElementById('fb-random-author').innerText = hideNames ? `นักเรียน ม.${rand.classroom}` : `${rand.firstName} • ม.${rand.classroom}`;
+            document.getElementById('fb-random-container').firstElementChild.nextElementSibling.dataset.stuid = rand.id;
+        }
+
+        function openStudentProfileFromFeedback(studentId) {
+            // Close search/filter context if needed, just jump
+            appState.currentFilterClass = 'all'; // reset to allow full prev/next
+            navigate('students', true);
+            setTimeout(() => { openStudentProfile(studentId); }, 50);
+        }
+
+        function generateWordCloud(feedbacks) {
+            const section = document.getElementById('fb-keyword-section');
+            const container = document.getElementById('fb-keyword-cloud');
+            container.innerHTML = '';
+            
+            if(feedbacks.length < 3) { section.classList.add('hidden'); return; }
+            section.classList.remove('hidden');
+
+            let allText = feedbacks.map(f => f.feedback).join(' ');
+            
+            // Very Basic Thai Stop Words for Demo purposes
+            const stopWords = ['ที่','และ','เป็น','ครับ','ค่ะ','นะ','ก็','จะ','ให้','มี','ได้','ใน','การ','ว่า','แล้ว','ไป','ของ','ด้วย','แต่','ถ้า','ผม','หนู','คะ','อยาก'];
+            
+            let words = allText.replace(/[^\u0E00-\u0E7F\s]/g, ' ').split(/\s+/);
+            
+            let counts = {};
+            words.forEach(w => {
+                if(w.length > 2 && !stopWords.includes(w)) counts[w] = (counts[w] || 0) + 1;
+            });
+
+            // Sort top 10
+            let sorted = Object.keys(counts).map(k => ({text: k, count: counts[k]})).sort((a,b) => b.count - a.count).slice(0, 10);
+            
+            sorted.forEach((w, i) => {
+                if(w.count > 1) { 
+                    const size = i === 0 ? 'text-lg font-bold px-4 py-2 bg-sky/20 text-sky-700' : (i < 3 ? 'text-base px-3 py-1 bg-gray-100 text-slate-700' : 'text-sm px-2 py-1 bg-gray-50 text-slate-500');
+                    container.innerHTML += `<span class="rounded-xl inline-block border border-transparent hover:border-gray-300 transition-colors cursor-default ${size}">${w.text}</span>`;
+                }
+            });
+            if(container.innerHTML === '') section.classList.add('hidden');
+        }
+
+        function renderHomeMenu() {
+            if(!appState.students.length) return;
+            
+            // Hero
+            let avgScore = appState.students.reduce((a,b)=>a+b.score, 0) / appState.students.length;
+            let avgPercent = (avgScore / TOTAL_QUESTIONS) * 100;
+            document.getElementById('hero-avg-percent').innerText = avgPercent.toFixed(1) + '%';
+            
+            const circle = document.getElementById('hero-progress-ring');
+            circle.style.strokeDashoffset = 326.72 - (avgPercent / 100) * 326.72;
+
+            document.getElementById('hero-total-students').innerText = appState.students.length;
+            document.getElementById('hero-passed').innerText = appState.students.filter(s => s.percentage >= appState.settings.passPercent).length;
+            document.getElementById('hero-max').innerText = Math.max(...appState.students.map(s => s.score));
+            document.getElementById('hero-min').innerText = Math.min(...appState.students.map(s => s.score));
+
+            // Insights
+            let excellent = appState.students.filter(s => s.percentage >= 80).length;
+            document.getElementById('insight-excellent').innerText = `นักเรียน ${excellent} คนได้คะแนนมากกว่า 80%`;
+            
+            let needsHelp = appState.students.filter(s => s.percentage < appState.settings.passPercent).length;
+            document.getElementById('insight-needs-help').innerText = `มีนักเรียน ${needsHelp} คนต่ำกว่าเกณฑ์ (${appState.settings.passPercent}%)`;
+
+            let hardestQ = [...appState.questions].sort((a,b) => a.accuracy - b.accuracy)[0];
+            document.getElementById('insight-hardest-q').innerText = `ข้อ ${hardestQ.number} มีผู้ตอบผิดถึง ${(100-hardestQ.accuracy).toFixed(0)}%`;
+
+            let top3Hardest = [...appState.questions].sort((a,b) => a.accuracy - b.accuracy).slice(0,3).map(q=>q.number);
+            document.getElementById('insight-action').innerText = `ควรทบทวนข้อ ${top3Hardest.join(', ')} ก่อนเริ่มเนื้อหาใหม่`;
+
+            renderScoreChart();
+        }
+
+        let scoreChartInstance = null;
+        function renderScoreChart() {
+            const ctx = document.getElementById('scoreChart');
+            if(!ctx) return;
+            
+            let ranges = {'0-49%':0, '50-59%':0, '60-69%':0, '70-79%':0, '80-89%':0, '90-100%':0};
+            appState.students.forEach(s => {
+                let p = s.percentage;
+                if(p<50) ranges['0-49%']++;
+                else if(p<60) ranges['50-59%']++;
+                else if(p<70) ranges['60-69%']++;
+                else if(p<80) ranges['70-79%']++;
+                else if(p<90) ranges['80-89%']++;
+                else ranges['90-100%']++;
+            });
+
+            if(scoreChartInstance) scoreChartInstance.destroy();
+            
+            scoreChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(ranges),
+                    datasets: [{
+                        label: 'จำนวนนักเรียน',
+                        data: Object.values(ranges),
+                        backgroundColor: ['#FB7185', '#FBBF24', '#36D399', '#4CC9F0', '#4F6EF7', '#8B5CF6'],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+        }
+
+        function renderQuestionsMenu() {
+            const grid = document.getElementById('q-grid');
+            grid.innerHTML = '';
+            
+            let totalAcc = appState.questions.reduce((a,b) => a+b.accuracy, 0) / appState.questions.length;
+            document.getElementById('q-avg-acc').innerText = totalAcc.toFixed(1) + '%';
+
+            appState.questions.forEach(q => {
+                let colorClass = '';
+                if(q.accuracy >= 80) colorClass = 'bg-emerald-500 text-white';
+                else if(q.accuracy >= 70) colorClass = 'bg-blue-400 text-white';
+                else if(q.accuracy >= 60) colorClass = 'bg-yellow-400 text-yellow-900';
+                else if(q.accuracy >= 50) colorClass = 'bg-orange-400 text-white';
+                else colorClass = 'bg-red-500 text-white shadow-md shadow-red-500/30 border-2 border-white';
+
+                const btn = document.createElement('button');
+                btn.className = `w-full aspect-square flex flex-col items-center justify-center rounded-2xl transition-all hover:brightness-110 active:scale-95 ${colorClass}`;
+                btn.onclick = () => openQuestionPanel(q.number);
+                btn.innerHTML = `<span class="text-xl font-bold">${q.number.toString().padStart(2,'0')}</span><span class="text-[10px] font-medium opacity-90">${q.accuracy.toFixed(0)}%</span>`;
+                grid.appendChild(btn);
+            });
+        }
+
+        function openQuestionPanel(qNum) {
+            const q = appState.questions.find(x => x.number === qNum);
+            if(!q) return;
+
+            document.getElementById('panel-backdrop').classList.remove('hidden');
+            const panel = document.getElementById('panel-question');
+            panel.classList.remove('hidden');
+
+            document.getElementById('pq-num').innerText = q.number;
+            document.getElementById('pq-acc').innerText = q.accuracy.toFixed(1) + '%';
+            document.getElementById('pq-correct-ans').innerText = q.correctAnswer;
+            
+            const choicesDiv = document.getElementById('pq-choices');
+            choicesDiv.innerHTML = '';
+            
+            let maxChoice = Math.max(...Object.values(q.choices));
+            for(let ans in q.choices) {
+                let count = q.choices[ans];
+                let pct = (count / appState.students.length) * 100;
+                let isCorrect = (ans === q.correctAnswer);
+                
+                choicesDiv.innerHTML += `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 font-bold text-slate-700 text-center">${ans || '-'}</div>
+                        <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full ${isCorrect ? 'bg-mint' : 'bg-slate-300'}" style="width: ${pct}%"></div>
+                        </div>
+                        <div class="w-16 text-right text-xs font-medium text-slate-500">${count} คน</div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('pq-wrong-count').innerText = q.incorrectCount;
+            const wrongDiv = document.getElementById('pq-wrong-students');
+            wrongDiv.innerHTML = '';
+            
+            if(q.incorrectCount === 0) {
+                wrongDiv.innerHTML = '<p class="text-sm text-slate-400 italic">ไม่มีนักเรียนตอบผิดในข้อนี้</p>';
+            } else {
+                q.wrongStudents.forEach(ws => {
+                    wrongDiv.innerHTML += `
+                        <div class="flex justify-between items-center bg-white p-2.5 rounded-xl border border-gray-50 hover:border-primary/30 cursor-pointer transition-colors" onclick="closeSidePanel(); openStudentProfile('${ws.id}')">
+                            <div>
+                                <div class="font-bold text-slate-700 text-sm">${ws.name}</div>
+                                <div class="text-[10px] text-slate-400">ม.${ws.room} • เลขที่ ${ws.num}</div>
+                            </div>
+                            <div class="text-xs bg-coral/10 text-coral font-bold px-2 py-1 rounded-md">ตอบ: ${ws.ans || '-'}</div>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        function renderFocusMenu() {
+            const listDiv = document.getElementById('focus-list');
+            listDiv.innerHTML = '';
+            
+            let hardest = [...appState.questions].sort((a,b) => a.accuracy - b.accuracy).slice(0, 5);
+            
+            hardest.forEach((q, index) => {
+                let wrongCounts = {};
+                q.wrongStudents.forEach(ws => wrongCounts[ws.ans] = (wrongCounts[ws.ans] || 0) + 1);
+                let mostWrongAns = '-'; let maxW = 0;
+                for(let k in wrongCounts) { if(wrongCounts[k] > maxW) { maxW = wrongCounts[k]; mostWrongAns = k; } }
+
+                const div = document.createElement('div');
+                div.className = `bg-white p-6 rounded-3xl shadow-sm border ${index === 0 ? 'border-coral shadow-coral/20 transform scale-[1.02]' : 'border-gray-50'} flex flex-col md:flex-row items-center gap-6`;
+                div.innerHTML = `
+                    <div class="flex-shrink-0 flex flex-col items-center justify-center w-20 h-20 rounded-2xl ${index===0 ? 'bg-coral text-white' : 'bg-coral/10 text-coral'} font-bold">
+                        <span class="text-xs uppercase opacity-80 mb-1">อันดับ ${index+1}</span>
+                        <span class="text-2xl leading-none">ข้อ ${q.number}</span>
+                    </div>
+                    <div class="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                        <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">ตอบผิด</div><div class="text-xl font-bold text-slate-800">${q.incorrectCount} <span class="text-sm font-medium text-slate-500">คน (${(100-q.accuracy).toFixed(0)}%)</span></div></div>
+                        <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">ตอบถูก</div><div class="text-xl font-bold text-mint">${q.correctCount} <span class="text-sm font-medium text-mint/70">คน</span></div></div>
+                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-100"><div class="text-[10px] text-slate-400 font-bold uppercase mb-1">เฉลย</div><div class="font-bold text-mint">${q.correctAnswer}</div></div>
+                        <div class="bg-coral/5 p-3 rounded-xl border border-coral/10"><div class="text-[10px] text-coral/70 font-bold uppercase mb-1">ผิดไปตอบ</div><div class="font-bold text-coral">${mostWrongAns} <span class="text-xs font-normal">(${maxW} คน)</span></div></div>
+                    </div>
+                    <div class="flex-shrink-0 w-full md:w-auto">
+                        <button onclick="openQuestionPanel(${q.number})" class="w-full md:w-auto px-5 py-2.5 bg-white border border-gray-200 hover:border-primary hover:text-primary rounded-xl font-bold text-sm text-slate-600 transition-colors">ดูนักเรียน</button>
+                    </div>
+                `;
+                listDiv.appendChild(div);
+            });
+        }
+
+        function renderInsightsMenu(initDropdown = false) {
+            const filterEl = document.getElementById('insight-class-filter');
+            if(initDropdown) {
+                filterEl.innerHTML = '<option value="all">ทุกห้องเรียน</option>';
+                appState.classrooms.forEach(c => filterEl.innerHTML += `<option value="${c}">ม.${c}</option>`);
+            }
+            
+            let selectedClass = filterEl.value;
+            let targetStudents = selectedClass === 'all' ? appState.students : appState.students.filter(s => s.classroom === selectedClass);
+            
+            if(targetStudents.length === 0) return;
+
+            let classQStats = [];
+            for(let i=0; i<TOTAL_QUESTIONS; i++) {
+                let cCount = 0;
+                targetStudents.forEach(s => { if(s.answers[i] === appState.questions[i].correctAnswer) cCount++; });
+                classQStats.push({ number: i+1, acc: (cCount / targetStudents.length) * 100 });
+            }
+
+            let goodQs = classQStats.filter(q => q.acc >= 80).map(q => q.number);
+            let badQs = classQStats.filter(q => q.acc < 50).sort((a,b) => a.acc - b.acc);
+
+            document.getElementById('insight-good').innerHTML = goodQs.length 
+                ? `<div class="flex flex-wrap gap-2">${goodQs.map(q => `<span class="w-10 h-10 rounded-xl bg-mint/10 text-mint font-bold flex items-center justify-center border border-mint/20 cursor-pointer hover:bg-mint hover:text-white transition-colors" onclick="openQuestionPanel(${q})">${q}</span>`).join('')}</div>`
+                : '<p class="text-sm text-slate-400">ยังไม่มีข้อที่ผ่านเกณฑ์ 80%</p>';
+                
+            document.getElementById('insight-bad').innerHTML = badQs.length 
+                ? `<div class="flex flex-wrap gap-2">${badQs.map(q => `<span class="w-10 h-10 rounded-xl bg-coral/10 text-coral font-bold flex items-center justify-center border border-coral/20 cursor-pointer hover:bg-coral hover:text-white transition-colors" title="${q.acc.toFixed(0)}%" onclick="openQuestionPanel(${q.number})">${q.number}</span>`).join('')}</div>`
+                : '<p class="text-sm text-slate-400">ยอดเยี่ยม! ไม่มีข้อที่ต่ำกว่า 50%</p>';
+
+            let tracking = targetStudents.filter(s => s.percentage < appState.settings.passPercent).sort((a,b) => a.score - b.score);
+            document.getElementById('insight-students').innerHTML = tracking.length
+                ? tracking.map(s => `<div class="flex justify-between items-center text-sm p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer" onclick="openStudentProfile('${s.id}')"><span class="font-bold text-slate-700">${s.firstName} ${s.lastName} (เลขที่ ${s.number})</span><span class="text-coral font-bold">${s.score} คะแนน</span></div>`).join('')
+                : '<p class="text-sm text-slate-400">ทุกคนผ่านเกณฑ์ มาชาอัลลอฮฺ</p>';
+
+            let actionText = "";
+            if(badQs.length > 0) {
+                let top3 = badQs.slice(0,3).map(q => q.number).join(', ');
+                actionText = `แนะนำให้เริ่มคาบด้วยการทบทวนข้อ <b>${top3}</b> เนื่องจากมีนักเรียนตอบผิดเกินครึ่งห้อง จากนั้นใช้คำถามสั้นๆ เพื่อเช็กความเข้าใจก่อนเริ่มเนื้อหาใหม่`;
+            } else {
+                actionText = `นักเรียนเข้าใจเนื้อหาส่วนใหญ่ได้ดี สามารถเข้าสู่เนื้อหาบทใหม่หรือทำกิจกรรมเสริมความเข้าใจเชิงลึกได้เลย`;
+            }
+            document.getElementById('insight-action-text').innerHTML = actionText;
+        }
+
+        function renderSettingsMenu() {
+            document.getElementById('set-pass-percent').value = appState.settings.passPercent;
+        }
+
+        function saveSettings() {
+            let val = parseInt(document.getElementById('set-pass-percent').value);
+            if(isNaN(val) || val < 0 || val > 100) val = 60;
+            
+            appState.settings.passPercent = val;
+            localStorage.setItem('akhlaq_settings', JSON.stringify(appState.settings));
+            
+            appState.students.forEach(s => {
+                s.statusObj = appState.getStatusObj(s.percentage);
+            });
+            
+            const btn = document.querySelector('#view-settings button');
+            const originalText = btn.innerText;
+            btn.innerText = 'บันทึกสำเร็จ ✓';
+            btn.classList.add('bg-mint', 'shadow-mint/30');
+            setTimeout(() => { 
+                btn.innerText = originalText; 
+                btn.classList.remove('bg-mint', 'shadow-mint/30');
+            }, 2000);
+        }
+
+        function renderReportMenu() {
+            const container = document.getElementById('print-container');
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+            
+            let passCount = appState.students.filter(s => s.percentage >= appState.settings.passPercent).length;
+            let avg = (appState.students.reduce((a,b)=>a+b.score,0) / appState.students.length).toFixed(1);
+            let max = Math.max(...appState.students.map(s=>s.score));
+            let min = Math.min(...appState.students.map(s=>s.score));
+
+            let html = `
+                <div class="print-page text-sm">
+                    <div class="text-center mb-8 border-b-2 border-gray-800 pb-4">
+                        <h1 class="text-2xl font-bold text-gray-900 mb-1">รายงานผลแบบทดสอบวิชาอัคลาค ระดับชั้น ม.5</h1>
+                        <p class="text-gray-600">วันที่ออกรายงาน: ${dateStr} | จำนวนผู้เข้าสอบ: ${appState.students.length} คน | ข้อสอบทั้งหมด: ${TOTAL_QUESTIONS} ข้อ</p>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-4 mb-8">
+                        <div class="border border-gray-300 p-4 rounded-lg text-center"><div class="text-gray-500 text-xs mb-1">คะแนนเฉลี่ย</div><div class="text-xl font-bold">${avg}</div></div>
+                        <div class="border border-gray-300 p-4 rounded-lg text-center"><div class="text-gray-500 text-xs mb-1">สูงสุด / ต่ำสุด</div><div class="text-xl font-bold">${max} / ${min}</div></div>
+                        <div class="border border-gray-300 p-4 rounded-lg text-center"><div class="text-gray-500 text-xs mb-1">ผ่านเกณฑ์ (${appState.settings.passPercent}%)</div><div class="text-xl font-bold">${passCount} คน</div></div>
+                        <div class="border border-gray-300 p-4 rounded-lg text-center"><div class="text-gray-500 text-xs mb-1">คิดเป็นเปอร์เซ็นต์</div><div class="text-xl font-bold">${((passCount/appState.students.length)*100).toFixed(1)}%</div></div>
+                    </div>
+
+                    <h3 class="font-bold text-lg mb-3 mt-8 border-l-4 border-gray-800 pl-2">สรุปคะแนนนักเรียน</h3>
+                    <table class="w-full text-left border-collapse border border-gray-300 mb-8 text-xs break-inside-avoid">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="border border-gray-300 p-2 text-center w-12">ลำดับ</th>
+                                <th class="border border-gray-300 p-2 w-16 text-center">ห้อง</th>
+                                <th class="border border-gray-300 p-2 w-16 text-center">เลขที่</th>
+                                <th class="border border-gray-300 p-2">ชื่อ - นามสกุล</th>
+                                <th class="border border-gray-300 p-2 text-center w-20">คะแนน</th>
+                                <th class="border border-gray-300 p-2 text-center w-20">%</th>
+                                <th class="border border-gray-300 p-2 text-center w-24">สถานะ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            let sortedStudents = [...appState.students].sort((a,b) => {
+                if(a.classroom !== b.classroom) return a.classroom.localeCompare(b.classroom);
+                return a.number - b.number;
+            });
+
+            sortedStudents.forEach((s, idx) => {
+                html += `
+                    <tr>
+                        <td class="border border-gray-300 p-2 text-center">${idx+1}</td>
+                        <td class="border border-gray-300 p-2 text-center">ม.${s.classroom}</td>
+                        <td class="border border-gray-300 p-2 text-center">${s.number}</td>
+                        <td class="border border-gray-300 p-2">${s.fullName}</td>
+                        <td class="border border-gray-300 p-2 text-center font-bold">${s.score}</td>
+                        <td class="border border-gray-300 p-2 text-center">${s.percentage.toFixed(0)}%</td>
+                        <td class="border border-gray-300 p-2 text-center">${s.percentage >= appState.settings.passPercent ? 'ผ่าน' : 'ไม่ผ่าน'}</td>
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table></div>`;
+
+            // Page Break for Analytics
+            html += `<div class="print-page-break print-page text-sm">
+                <h3 class="font-bold text-lg mb-3 border-l-4 border-gray-800 pl-2">วิเคราะห์ความยากง่ายรายข้อ (TOP 10 ข้อที่ควรทบทวน)</h3>
+                <table class="w-full text-left border-collapse border border-gray-300 mb-8 text-xs break-inside-avoid">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="border border-gray-300 p-2 text-center w-16">อันดับ</th>
+                            <th class="border border-gray-300 p-2 text-center w-16">ข้อที่</th>
+                            <th class="border border-gray-300 p-2 text-center">ตอบถูก (คน)</th>
+                            <th class="border border-gray-300 p-2 text-center">ตอบผิด (คน)</th>
+                            <th class="border border-gray-300 p-2 text-center w-24">% ถูกต้อง</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            let hardest = [...appState.questions].sort((a,b) => a.accuracy - b.accuracy).slice(0, 10);
+            hardest.forEach((q, idx) => {
+                html += `
+                    <tr>
+                        <td class="border border-gray-300 p-2 text-center font-bold">${idx+1}</td>
+                        <td class="border border-gray-300 p-2 text-center font-bold">ข้อ ${q.number}</td>
+                        <td class="border border-gray-300 p-2 text-center">${q.correctCount}</td>
+                        <td class="border border-gray-300 p-2 text-center">${q.incorrectCount}</td>
+                        <td class="border border-gray-300 p-2 text-center">${q.accuracy.toFixed(1)}%</td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table>`;
+
+            // Feedback
+            let feedbacks = appState.students.filter(s => s.feedback);
+            if(feedbacks.length > 0) {
+                 html += `
+                    <h3 class="font-bold text-lg mb-3 mt-8 border-l-4 border-gray-800 pl-2">เสียงจากนักเรียน</h3>
+                    <div class="grid grid-cols-2 gap-4 break-inside-avoid">
+                `;
+                feedbacks.forEach(f => {
+                    html += `<div class="border border-gray-200 p-3 rounded-lg bg-gray-50"><p class="italic mb-2">"${f.feedback}"</p><p class="text-right text-[10px] text-gray-500">- นักเรียน ม.${f.classroom}</p></div>`;
+                });
+                html += `</div>`;
+            }
+
+            html += `</div>`; // End print page
+
+            container.innerHTML = html;
+        }
+
+        // ================= INIT =================
+        window.addEventListener('DOMContentLoaded', () => {
+            appState.init();
+        });
+
+    </script>
+</body>
+</html>
